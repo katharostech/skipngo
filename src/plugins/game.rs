@@ -1,5 +1,8 @@
 use bevy::prelude::*;
 
+#[cfg(not(wasm))]
+use structopt::StructOpt;
+
 /// The main ECS stage for the game
 #[derive(StageLabel, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum GameStage {

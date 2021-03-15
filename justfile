@@ -9,8 +9,9 @@ build-web:
     cp wasm_resources/index.tpl.html target/wasm/index.html
     ln -fs ../../../assets target/wasm
 
-run:
-    cargo run {{dev_features}}
+run *args:
+    cargo run {{dev_features}} -- {{args}}
 
 run-web: build-web
+    @echo "Debug link: http://localhost:4000?RUST_LOG=debug"
     basic-http-server target/wasm
