@@ -12,6 +12,6 @@ build-web:
 run *args:
     cargo run {{dev_features}} -- {{args}}
 
-run-web: build-web
+run-web game='demo1': build-web
     @echo "Debug link: http://localhost:4000?RUST_LOG=debug"
     basic-http-server target/wasm

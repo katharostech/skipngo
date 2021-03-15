@@ -2,6 +2,9 @@ use bevy::{asset::AssetServerSettings, prelude::*};
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
 
+#[cfg(not(wasm))]
+use structopt::StructOpt;
+
 pub mod plugins;
 
 #[cfg(wasm)]
@@ -9,21 +12,27 @@ pub mod wasm_utils;
 
 pub fn run() {
     let log_config = get_log_config();
-
     let engine_config = EngineConfig::get_config();
-    debug!(?engine_config, "Loaded engine config");
 
     App::build()
+        // Configure the asset directory
         .insert_resource(AssetServerSettings {
             asset_folder: engine_config.asset_path,
         })
+        // Add the logging config
         .insert_resource(log_config)
+        // Install Bevy Retro
         .add_plugins(RetroPlugins)
+        // Install Bevy Retro LDtk
         .add_plugin(LdtkPlugin)
+        // Add our SkipnGo plugins
         .add_plugins(plugins::SkipnGoPlugins)
+        // Start the game!
         .run();
 }
 
+#[cfg(not(wasm))]
+use bevy::log::LogSettings;
 /// Get logging config for desktop
 #[cfg(not(wasm))]
 fn get_log_config() -> LogSettings {
@@ -32,9 +41,9 @@ fn get_log_config() -> LogSettings {
 }
 
 #[cfg(wasm)]
-use wasm_utils::get_log_config;
-
 use crate::wasm_utils::parse_url_query_string;
+#[cfg(wasm)]
+use wasm_utils::get_log_config;
 
 /// Game configuration provided exertnally i.e. commandline/URL query string
 #[derive(Debug)]
@@ -57,9 +66,9 @@ pub struct EngineConfig {
 }
 
 #[cfg(not(wasm))]
-impl GameConfig {
+impl EngineConfig {
     pub fn get_config() -> Self {
-        GameConfig::from_args()
+        EngineConfig::from_args()
     }
 }
 

@@ -1,7 +1,5 @@
 use bevy::prelude::*;
-
-#[cfg(not(wasm))]
-use structopt::StructOpt;
+use bevy_retro::*;
 
 /// The main ECS stage for the game
 #[derive(StageLabel, Clone, Debug, Hash, PartialEq, Eq)]
@@ -43,6 +41,26 @@ impl Plugin for GamePlugin {
     }
 }
 
-fn init() {}
+fn init(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    let sprite_image = asset_server.load("sprite.png");
+
+    commands
+        // spawn camera
+        .spawn(CameraBundle {
+            camera: Camera {
+                size: CameraSize::FixedHeight(50),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        // spawn sprite
+        .spawn(SpriteBundle {
+            image: sprite_image,
+            ..Default::default()
+        });
+}
 
 fn await_game_init() {}
