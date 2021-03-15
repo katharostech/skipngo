@@ -1,0 +1,18 @@
+[package]
+name = "skipngo"
+version = "0.0.0"
+authors = ["Zicklag <zicklag@katharostech.com>"]
+edition = "2018"
+license-file = "LICENSE.md"
+description = "A 2D game engine made so you can skip the hard stuff and go make a game!"
+repository = "https://github.com/katharostech/skipngo"
+documentation = "https://docs.rs/skipngo"
+readme = "README.md"
+keywords = ["gamedev", "game-engine", "bevy", "2D", "easy"]
+categories = [
+    "games",
+    "game-development",
+    "game-engines"
+]
+
+[dependencies]
