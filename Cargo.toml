@@ -19,3 +19,6 @@ categories = [
 bevy = { git = "https://github.com/bevyengine/bevy", default-features = false }
 bevy_retro = { git = "https://github.com/katharostech/bevy_retro" }
 bevy_retro_ldtk = { git = "https://github.com/katharostech/bevy_retro" }
+
+[profile.release]
+lto = true
