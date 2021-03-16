@@ -60,9 +60,19 @@ pub struct EngineConfig {
     /// The path to the game asset directory
     #[cfg_attr(
         not(wasm),
-        structopt(short = "a", long = "asset_dir", default_value = "assets")
+        structopt(short = "a", long = "asset_dir", default_value = "assets", parse(from_str = parse_asset_path))
     )]
     asset_path: String,
+}
+
+#[cfg(not(wasm))]
+fn parse_asset_path(s: &str) -> String {
+    std::env::current_dir()
+        .unwrap()
+        .join(s)
+        .to_str()
+        .unwrap()
+        .to_owned()
 }
 
 #[cfg(not(wasm))]
