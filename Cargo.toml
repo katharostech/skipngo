@@ -17,8 +17,14 @@ categories = [
 
 [dependencies]
 bevy = { git = "https://github.com/bevyengine/bevy", default-features = false }
-bevy_retro = { git = "https://github.com/katharostech/bevy_retro" }
-bevy_retro_ldtk = { git = "https://github.com/katharostech/bevy_retro" }
+# bevy_retro = { git = "https://github.com/katharostech/bevy_retro" }
+# bevy_retro_ldtk = { git = "https://github.com/katharostech/bevy_retro" }
+bevy_retro = { path = "../bevy_retro" }
+bevy_retro_ldtk = { path = "../bevy_retro/plugins/bevy_retro_ldtk" }
+serde_yaml = "0.8.17"
+serde = "1.0.124"
+thiserror = "1.0.24"
+anyhow = "1.0.38"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3.48", features = ["Window", "Location"] }
