@@ -1,14 +1,8 @@
 use bevy::prelude::*;
 use bevy_retro::*;
 
-/// The main ECS stage for the game
-#[derive(StageLabel, Clone, Debug, Hash, PartialEq, Eq)]
-pub enum GameStage {
-    Update,
-}
-
 /// The game states
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GameState {
     /// The game is initializing, loading initial data necessary to start up
     Initializing,
@@ -23,28 +17,17 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut AppBuilder) {
         app
             // Add game state resource
-            .insert_resource(State::new(GameState::Initializing))
-            // Add GameUpdate stage
-            .add_stage_after(
-                CoreStage::Update,
-                GameStage::Update,
-                StateStage::<GameState>::default(),
-            )
+            .add_state(GameState::Initializing)
             // Add game init sysem
-            .on_state_enter(GameStage::Update, GameState::Initializing, init.system())
+            .add_system_set(SystemSet::on_enter(GameState::Initializing).with_system(init.system()))
             // Add the system to wait for game initialization
-            .on_state_update(
-                GameStage::Update,
-                GameState::Running,
-                await_game_init.system(),
+            .add_system_set(
+                SystemSet::on_update(GameState::Initializing).with_system(await_game_init.system()),
             );
     }
 }
 
-fn init(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+fn init(mut commands: Commands, asset_server: Res<AssetServer>) {
     let sprite_image = asset_server.load("sprite.png");
 
     commands
