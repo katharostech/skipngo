@@ -53,7 +53,6 @@ fn await_init(
     game_info_assets: Res<Assets<GameInfo>>,
     asset_server: Res<AssetServer>,
     mut state: ResMut<State<GameState>>,
-    mut scene_graph: ResMut<SceneGraph>,
 ) {
     // Spawn the map once the game info loads
     for game_info_handle in game_infos.iter() {
@@ -124,11 +123,14 @@ fn spawn_players(
             let character_spritesheet_handle =
                 asset_server.load(format!("{}#spritesheet", game_info.player_character).as_str());
 
+            // Layers are 2 units away from each-other, so put the player at the top
+            let player_z = level.layer_instances.as_ref().unwrap().len() as i32 * 2;
+
             commands.spawn().insert_bundle(CharacterBundle {
                 character: character_handle,
                 sprite_bundle: SpriteBundle {
                     image: character_image_handle,
-                    position: Position::new(player_start.px[0], player_start.px[1],20),
+                    position: Position::new(player_start.px[0], player_start.px[1], player_z),
                     ..Default::default()
                 },
                 sprite_sheet: character_spritesheet_handle,

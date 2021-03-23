@@ -58,7 +58,7 @@ pub fn control_character(
     for (mut trans, mut current_action, mut current_direction, mut current_tileset_index, handle) in
         query.iter_mut()
     {
-        if let Some(character) = characters.get(handle) {
+        if characters.get(handle).is_some() {
             let mut direction = IVec2::default();
 
             // Determine movement direction
