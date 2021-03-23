@@ -20,7 +20,7 @@ build-web game='demo1':
     mkdir -p target/wasm
     ln -fs ../../games/{{game}} target/wasm/assets
 
-build-web-release:
+build-release-web:
     cargo build --target wasm32-unknown-unknown --release
     wasm-bindgen --out-dir target/wasm-dist --no-typescript --target web target/wasm32-unknown-unknown/release/skipngo.wasm
     cp wasm_resources/index.tpl.html target/wasm-dist/index.html
