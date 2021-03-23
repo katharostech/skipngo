@@ -1,4 +1,4 @@
-use bevy::{prelude::*, reflect::TypeUuid};
+use bevy::{core::FixedTimestep, prelude::*, reflect::TypeUuid};
 use bevy_retro::*;
 use serde::Deserialize;
 
@@ -19,7 +19,10 @@ impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut bevy::prelude::AppBuilder) {
         app.add_asset::<Character>()
             .init_asset_loader::<CharacterLoader>()
-            .add_stage(CharacterStages::Game, SystemStage::parallel())
+            .add_stage(
+                CharacterStages::Game,
+                SystemStage::parallel().with_run_criteria(FixedTimestep::step(0.012)),
+            )
             .add_stage_after(
                 CharacterStages::Game,
                 CharacterStages::CameraFollow,

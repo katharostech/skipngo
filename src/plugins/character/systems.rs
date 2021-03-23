@@ -35,7 +35,7 @@ pub fn finish_spawning_character(
 
 /// Walk the character in response to input
 pub fn control_character(
-    mut timer: Local<Timer>,
+    mut frame: Local<u8>,
     mut query: Query<(
         &mut Position,
         &mut CurrentCharacterAction,
@@ -45,15 +45,8 @@ pub fn control_character(
     )>,
     characters: Res<Assets<Character>>,
     input: Res<Input<KeyCode>>,
-    time: Res<Time>,
 ) {
-    timer.set_duration(Duration::from_millis(10));
-    timer.set_repeating(true);
-    timer.tick(time.delta());
-
-    if !timer.finished() {
-        return;
-    }
+    *frame = frame.wrapping_add(1);
 
     for (mut trans, mut current_action, mut current_direction, mut current_tileset_index, handle) in
         query.iter_mut()
@@ -74,15 +67,6 @@ pub fn control_character(
             if input.pressed(KeyCode::Up) {
                 direction += IVec2::new(0, -1);
             }
-
-            // Clamp direction to the speed
-            // if direction.x != 0 && direction.y != 0 {
-            //     direction = direction.normalize() * speed;
-            // }
-
-            // Move the sprite
-            trans.x += direction.x;
-            trans.y += direction.y;
 
             // Determine animation and direction
             let new_action;
@@ -112,17 +96,31 @@ pub fn control_character(
                 *current_action = new_action;
                 current_tileset_index.0 = 0;
             }
+
+            // Make sure movement speed is normalized
+            if direction.x != 0 && direction.y != 0 {
+                if *frame % 2 == 0 {
+                    direction.y = 0;
+                } else {
+                    direction.x = 0;
+                }
+            }
+
             if new_direction != *current_direction {
                 *current_direction = new_direction;
                 current_tileset_index.0 = 0;
             }
+
+            // Move the sprite
+            trans.x += direction.x;
+            trans.y += direction.y;
         }
     }
 }
 
 /// Play the character's sprite animation
 pub fn animate_sprite_system(
-    time: Res<Time>,
+    mut frame: Local<u8>,
     characters: Res<Assets<Character>>,
     mut query: Query<(
         &mut Timer,
@@ -135,6 +133,8 @@ pub fn animate_sprite_system(
     )>,
     mut sprite_sheet_assets: ResMut<Assets<SpriteSheet>>,
 ) {
+    *frame = frame.wrapping_add(1);
+
     for (
         mut timer,
         sprite_sheet,
@@ -145,8 +145,7 @@ pub fn animate_sprite_system(
         character_handle,
     ) in query.iter_mut()
     {
-        timer.tick(time.delta());
-        if timer.finished() {
+        if *frame % 10 == 0 {
             if let Some(sprite_sheet) = sprite_sheet_assets.get_mut(sprite_sheet) {
                 let character = characters.get(character_handle).unwrap();
                 current_anim_index.0 = current_anim_index.0.wrapping_add(1);
