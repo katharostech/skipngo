@@ -1,4 +1,8 @@
-use bevy::{asset::AssetServerSettings, prelude::*};
+use bevy::{
+    asset::AssetServerSettings,
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    prelude::*,
+};
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
 
@@ -14,7 +18,13 @@ pub fn run() {
     let log_config = get_log_config();
     let engine_config = EngineConfig::get_config();
 
-    App::build()
+    let mut builder = App::build();
+
+    builder
+        .insert_resource(WindowDescriptor {
+            title: "Skip'n Go".into(),
+            ..Default::default()
+        })
         // Configure the asset directory
         .insert_resource(AssetServerSettings {
             asset_folder: engine_config.asset_path,
@@ -26,9 +36,16 @@ pub fn run() {
         // Install Bevy Retro LDtk
         .add_plugin(LdtkPlugin)
         // Add our SkipnGo plugins
-        .add_plugins(plugins::SkipnGoPlugins)
-        // Start the game!
-        .run();
+        .add_plugins(plugins::SkipnGoPlugins);
+
+    if engine_config.frame_time_diagnostics {
+        builder
+            .add_plugin(FrameTimeDiagnosticsPlugin)
+            .add_plugin(LogDiagnosticsPlugin::default());
+    }
+
+    // Start the game!
+    builder.run();
 }
 
 #[cfg(not(wasm))]
@@ -63,6 +80,9 @@ pub struct EngineConfig {
         structopt(short = "a", long = "asset_dir", default_value = "assets", parse(from_str = parse_asset_path))
     )]
     asset_path: String,
+    /// Whether or not to enable frame time diagnostics to the console
+    #[cfg_attr(not(wasm), structopt(short = "d", long = "frame_time_diagnostics"))]
+    frame_time_diagnostics: bool,
 }
 
 #[cfg(not(wasm))]
@@ -94,6 +114,9 @@ impl EngineConfig {
             asset_path: parse_url_query_string(&asset_url, "asset_url")
                 .map(String::from)
                 .unwrap_or("/assets".into()),
+            frame_time_diagnostics: parse_url_query_string(&asset_url, "frame_time_diagnostics")
+                .map(|x| x == "true")
+                .unwrap_or(false),
         }
     }
 }

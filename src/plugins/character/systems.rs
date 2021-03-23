@@ -28,7 +28,7 @@ pub fn finish_spawning_character(
         if let Some(character) = character_assets.get(character_handle) {
             *image_handle = character.sprite_image.clone();
             *sprite_sheet_handle = character.sprite_sheet.clone();
-            commands.insert(ent, CharacterLoaded);
+            commands.entity(ent).insert(CharacterLoaded);
         }
     }
 }
@@ -127,7 +127,7 @@ pub fn animate_sprite_system(
     mut query: Query<(
         &mut Timer,
         &Handle<SpriteSheet>,
-        &mut SpriteFlip,
+        &mut Sprite,
         &mut CharacterCurrentTilesetIndex,
         &CurrentCharacterAction,
         &CurrentCharacterDirection,
@@ -138,7 +138,7 @@ pub fn animate_sprite_system(
     for (
         mut timer,
         sprite_sheet,
-        mut sprite_flip,
+        mut sprite,
         mut current_anim_index,
         current_action,
         current_direction,
@@ -164,9 +164,9 @@ pub fn animate_sprite_system(
                 };
 
                 if direction.flip {
-                    sprite_flip.x = true;
+                    sprite.flip_x = true;
                 } else {
-                    sprite_flip.x = false;
+                    sprite.flip_x = false;
                 }
 
                 let idx = direction

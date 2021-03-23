@@ -43,7 +43,7 @@ impl Plugin for GamePlugin {
 /// Load the game info
 fn init(mut commands: Commands, asset_server: Res<AssetServer>) {
     let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
-    commands.spawn((game_info,));
+    commands.spawn().insert(game_info);
 }
 
 /// Wait for the game info to load and spawn the map
@@ -59,7 +59,7 @@ fn await_init(
     for game_info_handle in game_infos.iter() {
         if let Some(game_info) = game_info_assets.get(game_info_handle) {
             // Spawn the camera
-            commands.spawn(CameraBundle {
+            commands.spawn().insert_bundle(CameraBundle {
                 camera: Camera {
                     size: CameraSize::FixedHeight(game_info.viewport_height),
                     ..Default::default()
@@ -68,37 +68,14 @@ fn await_init(
             });
 
             // Spawn the map
-            let map_ent = commands.spawn(()).current_entity().unwrap();
-            let map_node = scene_graph.add_node(map_ent);
-            commands.with_bundle(LdtkMapBundle {
+            commands.spawn().insert_bundle(LdtkMapBundle {
                 map: asset_server.load(game_info.map.as_str()),
                 config: LdtkMapConfig {
                     set_clear_color: true,
                     ..Default::default()
                 },
-                scene_node: map_node,
                 ..Default::default()
             });
-            // let character_handle: Handle<Character> =
-            //     asset_server.load(game_info.player_character.as_str());
-
-            // let character_image_handle =
-            //     asset_server.load(format!("{}#atlas", game_info.player_character).as_str());
-            // let character_spritesheet_handle =
-            //     asset_server.load(format!("{}#spritesheet", game_info.player_character).as_str());
-
-            // commands.spawn(CharacterBundle {
-            //     character: character_handle,
-            //     sprite_bundle: SpriteBundle {
-            //         image: character_image_handle,
-            //         position: Position::new(0, 0, 100000),
-            //         ..Default::default()
-            //     },
-            //     sprite_sheet: character_spritesheet_handle,
-            //     ..Default::default()
-            // });
-
-            // Go to the running state
 
             // Transition to running state
             state.set_push(GameState::LoadingMap).unwrap();
@@ -147,11 +124,11 @@ fn spawn_players(
             let character_spritesheet_handle =
                 asset_server.load(format!("{}#spritesheet", game_info.player_character).as_str());
 
-            commands.spawn(CharacterBundle {
+            commands.spawn().insert_bundle(CharacterBundle {
                 character: character_handle,
                 sprite_bundle: SpriteBundle {
                     image: character_image_handle,
-                    position: Position::new(player_start.px[0], player_start.px[1], 100000),
+                    position: Position::new(player_start.px[0], player_start.px[1],20),
                     ..Default::default()
                 },
                 sprite_sheet: character_spritesheet_handle,

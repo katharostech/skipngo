@@ -1,5 +1,6 @@
 use bevy::{
     asset::{AssetLoader, AssetPath, LoadedAsset},
+    math::UVec2,
     prelude::Handle,
 };
 use bevy_retro::*;
@@ -53,7 +54,7 @@ async fn load_character<'a, 'b>(
     let sprite_sheet_handle = load_context.set_labeled_asset(
         "SpriteSheet",
         LoadedAsset::new(SpriteSheet {
-            grid_size: character.sprite_sheet.grid_size.0,
+            grid_size: UVec2::splat(character.sprite_sheet.grid_size.0),
             tile_index: 0,
         }),
     );
