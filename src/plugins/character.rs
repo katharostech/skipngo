@@ -7,8 +7,6 @@ pub mod systems;
 
 use loader::CharacterLoader;
 
-use self::systems::CharacterAnimationFrame;
-
 pub struct CharacterPlugin;
 
 #[derive(Eq, PartialEq, StageLabel, Clone, Hash, Debug)]
@@ -106,45 +104,44 @@ pub struct CharacterAnimation {
 pub struct CharacterCurrentTilesetIndex(pub u32);
 
 #[derive(PartialEq, Eq, Clone, Copy)]
-pub enum CurrentCharacterAction {
+pub enum CharacterStateAction {
     Walk,
     Idle,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
-pub enum CurrentCharacterDirection {
+pub enum CharacterStateDirection {
     Up,
     Down,
     Left,
     Right,
 }
 
+pub struct CharacterState {
+    pub action: CharacterStateAction,
+    pub direction: CharacterStateDirection,
+    pub tileset_index: u32,
+    pub animation_frame: u16,
+}
+
+impl Default for CharacterState {
+    fn default() -> Self {
+        Self {
+            action: CharacterStateAction::Idle,
+            direction: CharacterStateDirection::Down,
+            tileset_index: 0,
+            animation_frame: 0,
+        }
+    }
+}
+
 /// A bundle for spawning a character
 // Copied mostly from the SpriteSheetBundle bundle
-#[derive(Bundle)]
+#[derive(Bundle, Default)]
 pub struct CharacterBundle {
     pub character: Handle<Character>,
-    pub current_action: CurrentCharacterAction,
-    pub current_direction: CurrentCharacterDirection,
-    pub current_tileset_index: CharacterCurrentTilesetIndex,
-    pub character_animation_frame: CharacterAnimationFrame,
-    pub animation_frame_timer: Timer,
+    pub state: CharacterState,
     #[bundle]
     pub sprite_bundle: SpriteBundle,
     pub sprite_sheet: Handle<SpriteSheet>,
-}
-
-impl Default for CharacterBundle {
-    fn default() -> Self {
-        Self {
-            character: Default::default(),
-            current_tileset_index: CharacterCurrentTilesetIndex(0),
-            current_action: CurrentCharacterAction::Idle,
-            current_direction: CurrentCharacterDirection::Down,
-            character_animation_frame: CharacterAnimationFrame(0),
-            animation_frame_timer: Timer::from_seconds(0.1, true),
-            sprite_bundle: Default::default(),
-            sprite_sheet: Default::default(),
-        }
-    }
 }

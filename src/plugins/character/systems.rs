@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 use bevy_retro::*;
 
-use super::{
-    Character, CharacterCurrentTilesetIndex, CurrentCharacterAction, CurrentCharacterDirection,
-};
+use super::*;
 
 pub struct CharacterLoaded;
 
@@ -35,26 +33,11 @@ pub struct CharacterAnimationFrame(pub u16);
 
 /// Walk the character in response to input
 pub fn control_character(
-    mut query: Query<(
-        &mut Position,
-        &mut CurrentCharacterAction,
-        &mut CurrentCharacterDirection,
-        &mut CharacterCurrentTilesetIndex,
-        &mut CharacterAnimationFrame,
-        &Handle<Character>,
-    )>,
+    mut query: Query<(&mut Position, &mut CharacterState, &Handle<Character>)>,
     characters: Res<Assets<Character>>,
     input: Res<Input<KeyCode>>,
 ) {
-    for (
-        mut trans,
-        mut current_action,
-        mut current_direction,
-        mut current_tileset_index,
-        mut character_animation_frame,
-        handle,
-    ) in query.iter_mut()
-    {
+    for (mut pos, mut state, handle) in query.iter_mut() {
         if characters.get(handle).is_some() {
             let mut direction = IVec2::default();
 
@@ -74,51 +57,51 @@ pub fn control_character(
 
             // Determine animation and direction
             let new_action;
-            let mut new_direction = *current_direction;
+            let mut new_direction = state.direction;
 
             if direction.x == 0 && direction.y == 0 {
-                new_action = CurrentCharacterAction::Idle;
+                new_action = CharacterStateAction::Idle;
             } else {
-                new_action = CurrentCharacterAction::Walk;
+                new_action = CharacterStateAction::Walk;
 
                 if direction.y.abs() > 0 && direction.x.abs() > 0 {
                     // We are moving diagnally, so the new direction should be the same as the
                     // previous direction and we don't do anything.
                 } else if direction.y > 0 {
-                    new_direction = CurrentCharacterDirection::Down;
+                    new_direction = CharacterStateDirection::Down;
                 } else if direction.y < 0 {
-                    new_direction = CurrentCharacterDirection::Up;
+                    new_direction = CharacterStateDirection::Up;
                 } else if direction.x > 0 {
-                    new_direction = CurrentCharacterDirection::Right;
+                    new_direction = CharacterStateDirection::Right;
                 } else if direction.x < 0 {
-                    new_direction = CurrentCharacterDirection::Left;
+                    new_direction = CharacterStateDirection::Left;
                 }
             }
 
             // Update the character action
-            if new_action != *current_action {
-                *current_action = new_action;
-                current_tileset_index.0 = 0;
-                character_animation_frame.0 = 0;
+            if new_action != state.action {
+                state.action = new_action;
+                state.tileset_index = 0;
+                state.animation_frame = 0;
             }
 
             // Make sure movement speed is normalized
             if direction.x != 0 && direction.y != 0 {
-                if character_animation_frame.0 % 2 == 0 {
+                if state.animation_frame % 2 == 0 {
                     direction.y = 0;
                     direction.x = 0;
                 }
             }
 
-            if new_direction != *current_direction {
-                *current_direction = new_direction;
-                current_tileset_index.0 = 0;
-                character_animation_frame.0 = 0;
+            if new_direction != state.direction {
+                state.direction = new_direction;
+                state.tileset_index = 0;
+                state.animation_frame = 0;
             }
 
             // Move the sprite
-            trans.x += direction.x;
-            trans.y += direction.y;
+            pos.x += direction.x;
+            pos.y += direction.y;
         }
     }
 }
@@ -129,38 +112,28 @@ pub fn animate_sprite_system(
     mut query: Query<(
         &Handle<SpriteSheet>,
         &mut Sprite,
-        &mut CharacterCurrentTilesetIndex,
-        &CurrentCharacterAction,
-        &CurrentCharacterDirection,
-        &mut CharacterAnimationFrame,
+        &mut CharacterState,
         &Handle<Character>,
     )>,
     mut sprite_sheet_assets: ResMut<Assets<SpriteSheet>>,
 ) {
-    for (
-        sprite_sheet,
-        mut sprite,
-        mut current_anim_index,
-        current_action,
-        current_direction,
-        mut character_animation_frame,
-        character_handle,
-    ) in query.iter_mut()
-    {
-        if character_animation_frame.0 % 10 == 0 {
+    for (sprite_sheet, mut sprite, mut state, character_handle) in query.iter_mut() {
+        if state.animation_frame % 10 == 0 {
+            state.animation_frame = 0;
+
             if let Some(sprite_sheet) = sprite_sheet_assets.get_mut(sprite_sheet) {
                 let character = characters.get(character_handle).unwrap();
 
-                let action = match *current_action {
-                    CurrentCharacterAction::Walk => &character.actions.walk,
-                    CurrentCharacterAction::Idle => &character.actions.idle,
+                let action = match state.action {
+                    CharacterStateAction::Walk => &character.actions.walk,
+                    CharacterStateAction::Idle => &character.actions.idle,
                 };
 
-                let direction = match *current_direction {
-                    CurrentCharacterDirection::Up => &action.animations.up,
-                    CurrentCharacterDirection::Down => &action.animations.down,
-                    CurrentCharacterDirection::Left => &action.animations.left,
-                    CurrentCharacterDirection::Right => &action.animations.right,
+                let direction = match state.direction {
+                    CharacterStateDirection::Up => &action.animations.up,
+                    CharacterStateDirection::Down => &action.animations.down,
+                    CharacterStateDirection::Left => &action.animations.left,
+                    CharacterStateDirection::Right => &action.animations.right,
                 };
 
                 if direction.flip {
@@ -169,20 +142,15 @@ pub fn animate_sprite_system(
                     sprite.flip_x = false;
                 }
 
-                let idx = direction
-                    .frames
-                    .iter()
-                    .cycle()
-                    .nth(current_anim_index.0 as usize)
-                    .unwrap();
+                let idx = direction.frames[state.tileset_index as usize % direction.frames.len()];
 
-                sprite_sheet.tile_index = *idx;
+                sprite_sheet.tile_index = idx;
 
-                current_anim_index.0 = current_anim_index.0.wrapping_add(1);
+                state.tileset_index = state.tileset_index.wrapping_add(1);
             }
         }
 
-        character_animation_frame.0 = character_animation_frame.0.wrapping_add(1);
+        state.animation_frame = state.animation_frame.wrapping_add(1);
     }
 }
 
