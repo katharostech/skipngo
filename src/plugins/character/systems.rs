@@ -31,23 +31,29 @@ pub fn finish_spawning_character(
     }
 }
 
+pub struct CharacterAnimationFrame(pub u16);
+
 /// Walk the character in response to input
 pub fn control_character(
-    mut frame: Local<u8>,
     mut query: Query<(
         &mut Position,
         &mut CurrentCharacterAction,
         &mut CurrentCharacterDirection,
         &mut CharacterCurrentTilesetIndex,
+        &mut CharacterAnimationFrame,
         &Handle<Character>,
     )>,
     characters: Res<Assets<Character>>,
     input: Res<Input<KeyCode>>,
 ) {
-    *frame = frame.wrapping_add(1);
-
-    for (mut trans, mut current_action, mut current_direction, mut current_tileset_index, handle) in
-        query.iter_mut()
+    for (
+        mut trans,
+        mut current_action,
+        mut current_direction,
+        mut current_tileset_index,
+        mut character_animation_frame,
+        handle,
+    ) in query.iter_mut()
     {
         if characters.get(handle).is_some() {
             let mut direction = IVec2::default();
@@ -93,13 +99,13 @@ pub fn control_character(
             if new_action != *current_action {
                 *current_action = new_action;
                 current_tileset_index.0 = 0;
+                character_animation_frame.0 = 0;
             }
 
             // Make sure movement speed is normalized
             if direction.x != 0 && direction.y != 0 {
-                if *frame % 2 == 0 {
+                if character_animation_frame.0 % 2 == 0 {
                     direction.y = 0;
-                } else {
                     direction.x = 0;
                 }
             }
@@ -107,6 +113,7 @@ pub fn control_character(
             if new_direction != *current_direction {
                 *current_direction = new_direction;
                 current_tileset_index.0 = 0;
+                character_animation_frame.0 = 0;
             }
 
             // Move the sprite
@@ -118,35 +125,31 @@ pub fn control_character(
 
 /// Play the character's sprite animation
 pub fn animate_sprite_system(
-    mut frame: Local<u8>,
     characters: Res<Assets<Character>>,
     mut query: Query<(
-        &mut Timer,
         &Handle<SpriteSheet>,
         &mut Sprite,
         &mut CharacterCurrentTilesetIndex,
         &CurrentCharacterAction,
         &CurrentCharacterDirection,
+        &mut CharacterAnimationFrame,
         &Handle<Character>,
     )>,
     mut sprite_sheet_assets: ResMut<Assets<SpriteSheet>>,
 ) {
-    *frame = frame.wrapping_add(1);
-
     for (
-        mut timer,
         sprite_sheet,
         mut sprite,
         mut current_anim_index,
         current_action,
         current_direction,
+        mut character_animation_frame,
         character_handle,
     ) in query.iter_mut()
     {
-        if *frame % 10 == 0 {
+        if character_animation_frame.0 % 10 == 0 {
             if let Some(sprite_sheet) = sprite_sheet_assets.get_mut(sprite_sheet) {
                 let character = characters.get(character_handle).unwrap();
-                current_anim_index.0 = current_anim_index.0.wrapping_add(1);
 
                 let action = match *current_action {
                     CurrentCharacterAction::Walk => &character.actions.walk,
@@ -174,8 +177,12 @@ pub fn animate_sprite_system(
                     .unwrap();
 
                 sprite_sheet.tile_index = *idx;
+
+                current_anim_index.0 = current_anim_index.0.wrapping_add(1);
             }
         }
+
+        character_animation_frame.0 = character_animation_frame.0.wrapping_add(1);
     }
 }
 

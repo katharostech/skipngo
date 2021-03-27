@@ -7,6 +7,8 @@ pub mod systems;
 
 use loader::CharacterLoader;
 
+use self::systems::CharacterAnimationFrame;
+
 pub struct CharacterPlugin;
 
 #[derive(Eq, PartialEq, StageLabel, Clone, Hash, Debug)]
@@ -125,6 +127,7 @@ pub struct CharacterBundle {
     pub current_action: CurrentCharacterAction,
     pub current_direction: CurrentCharacterDirection,
     pub current_tileset_index: CharacterCurrentTilesetIndex,
+    pub character_animation_frame: CharacterAnimationFrame,
     pub animation_frame_timer: Timer,
     #[bundle]
     pub sprite_bundle: SpriteBundle,
@@ -138,6 +141,7 @@ impl Default for CharacterBundle {
             current_tileset_index: CharacterCurrentTilesetIndex(0),
             current_action: CurrentCharacterAction::Idle,
             current_direction: CurrentCharacterDirection::Down,
+            character_animation_frame: CharacterAnimationFrame(0),
             animation_frame_timer: Timer::from_seconds(0.1, true),
             sprite_bundle: Default::default(),
             sprite_sheet: Default::default(),
