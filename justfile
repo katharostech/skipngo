@@ -7,10 +7,12 @@ build-release:
     cargo build --release
     strip target/release/skipngo
 
+build-cross-windows:
+    cargo build --target x86_64-pc-windows-gnu
+
 build-release-cross-windows:
     cargo build --release --target x86_64-pc-windows-gnu
     strip target/x86_64-pc-windows-gnu/release/skipngo.exe
-    rm -rf 
 
 build-web game='demo1':
     cargo build --target wasm32-unknown-unknown
