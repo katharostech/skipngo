@@ -44,12 +44,17 @@ async fn load_character<'a, 'b>(
         .unwrap()
         .join(&character.sprite_sheet.path);
 
+    // Get the path to the tileset image asset
+    let collision_file_path = load_context
+        .path()
+        .parent()
+        .unwrap()
+        .join(&character.collision_shape);
+
     // Convert that to an asset path for the texture
-    let texture_path = AssetPath::new(atlas_file_path.clone(), None);
-
+    let sprite_image_path = AssetPath::new(atlas_file_path.clone(), None);
     // Get the texture handle
-    let image_handle: Handle<Image> = load_context.get_handle(texture_path.clone());
-
+    let sprite_image_handle: Handle<Image> = load_context.get_handle(sprite_image_path.clone());
     // Add it as a labled asset
     let sprite_sheet_handle = load_context.set_labeled_asset(
         "SpriteSheet",
@@ -59,17 +64,25 @@ async fn load_character<'a, 'b>(
         }),
     );
 
+    // Convert that to an asset path for the texture
+    let collision_image_path = AssetPath::new(collision_file_path.clone(), None);
+    // Get the texture handle
+    let collision_image_handle: Handle<Image> =
+        load_context.get_handle(collision_image_path.clone());
+
     // Set the character asset
     load_context.set_default_asset(
         LoadedAsset::new(Character {
             name: character.name,
             sprite_sheet_info: character.sprite_sheet,
+            collision_shape: collision_image_handle,
             actions: character.actions,
             walk_speed: character.walk_speed,
-            sprite_image: image_handle,
+            sprite_image: sprite_image_handle,
             sprite_sheet: sprite_sheet_handle,
         })
-        .with_dependency(texture_path),
+        .with_dependency(collision_image_path)
+        .with_dependency(sprite_image_path),
     );
 
     Ok(())

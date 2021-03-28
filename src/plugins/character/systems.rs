@@ -38,16 +38,7 @@ pub fn control_character<'a>(
         // World positions so that we can synchronize them
         WorldPositions,
         // Character collision read query
-        Query<
-            (
-                Entity,
-                &Handle<Image>,
-                &Sprite,
-                &Handle<SpriteSheet>,
-                &WorldPosition,
-            ),
-            With<Handle<Character>>,
-        >,
+        Query<(Entity, &Handle<Character>, &Sprite, &WorldPosition)>,
         // Query map layers
         Query<(&LdtkMapLayer, &Handle<Image>, &Sprite, &WorldPosition)>,
     )>,
@@ -55,7 +46,6 @@ pub fn control_character<'a>(
     input: Res<Input<KeyCode>>,
     mut scene_graph: ResMut<SceneGraph>,
     image_assets: Res<Assets<Image>>,
-    sprite_sheet_assets: Res<Assets<SpriteSheet>>,
 ) {
     // Loop through characters and move them
     for (mut pos, mut state, character_handle) in queries.q0_mut().iter_mut() {
@@ -135,20 +125,18 @@ pub fn control_character<'a>(
 
     // Check for collisions and record all the characters that collided
     let mut collided_characters = Vec::new();
-    for (character_ent, character_image, character_sprite, character_sprite_sheet, character_pos) in
-        queries.q2().iter()
-    {
-        let character_image = if let Some(i) = image_assets.get(character_image) {
-            i
+    for (character_ent, character_handle, character_sprite, character_pos) in queries.q2().iter() {
+        let character = if let Some(character) = character_assets.get(character_handle) {
+            character
         } else {
             continue;
         };
-        let character_sprite_sheet =
-            if let Some(i) = sprite_sheet_assets.get(character_sprite_sheet) {
-                i
-            } else {
-                continue;
-            };
+        let character_collision = if let Some(image) = image_assets.get(&character.collision_shape)
+        {
+            image
+        } else {
+            continue;
+        };
 
         for (layer, layer_image, layer_sprite, layer_pos) in queries.q3().iter() {
             // Skip non-collision layers
@@ -165,10 +153,10 @@ pub fn control_character<'a>(
             if let Some(layer_image) = image_assets.get(layer_image) {
                 if pixels_collide_with(
                     PixelColliderInfo {
-                        image: character_image,
+                        image: character_collision,
                         position: character_pos,
                         sprite: character_sprite,
-                        sprite_sheet: Some(character_sprite_sheet),
+                        sprite_sheet: None,
                     },
                     PixelColliderInfo {
                         image: layer_image,

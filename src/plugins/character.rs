@@ -53,6 +53,7 @@ pub struct Character {
     pub walk_speed: u32,
     pub sprite_image: Handle<Image>,
     pub sprite_sheet: Handle<SpriteSheet>,
+    pub collision_shape: Handle<Image>,
 }
 
 #[derive(Deserialize)]
@@ -63,6 +64,7 @@ pub struct CharacterYmlData {
     pub sprite_sheet: CharacterSpriteSheet,
     pub actions: CharacterActions,
     pub walk_speed: u32,
+    pub collision_shape: String,
 }
 
 #[derive(Deserialize)]
