@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_retro::*;
+use bevy_retro_ldtk::*;
 
 use super::*;
 
@@ -29,16 +30,36 @@ pub fn finish_spawning_character(
     }
 }
 
-pub struct CharacterAnimationFrame(pub u16);
-
 /// Walk the character in response to input
-pub fn control_character(
-    mut query: Query<(&mut Position, &mut CharacterState, &Handle<Character>)>,
-    characters: Res<Assets<Character>>,
+pub fn control_character<'a>(
+    mut queries: QuerySet<(
+        // Character mutation query
+        Query<(&mut Position, &mut CharacterState, &Handle<Character>)>,
+        // World positions so that we can synchronize them
+        WorldPositions,
+        // Character collision read query
+        Query<
+            (
+                Entity,
+                &Handle<Image>,
+                &Sprite,
+                &Handle<SpriteSheet>,
+                &WorldPosition,
+            ),
+            With<Handle<Character>>,
+        >,
+        // Query map layers
+        Query<(&LdtkMapLayer, &Handle<Image>, &Sprite, &WorldPosition)>,
+    )>,
+    character_assets: Res<Assets<Character>>,
     input: Res<Input<KeyCode>>,
+    mut scene_graph: ResMut<SceneGraph>,
+    image_assets: Res<Assets<Image>>,
+    sprite_sheet_assets: Res<Assets<SpriteSheet>>,
 ) {
-    for (mut pos, mut state, handle) in query.iter_mut() {
-        if characters.get(handle).is_some() {
+    // Loop through characters and move them
+    for (mut pos, mut state, character_handle) in queries.q0_mut().iter_mut() {
+        if character_assets.get(character_handle).is_some() {
             let mut direction = IVec2::default();
 
             // Determine movement direction
@@ -99,10 +120,73 @@ pub fn control_character(
                 state.animation_frame = 0;
             }
 
+            // Record the previous position so that we can move the player back in the collision
+            // detection system.
+            state.previous_position = pos.clone();
+
             // Move the sprite
             pos.x += direction.x;
             pos.y += direction.y;
         }
+    }
+
+    // Synchronize world positions before checking for collisions
+    queries.q1_mut().sync_world_positions(&mut scene_graph);
+
+    // Check for collisions and record all the characters that collided
+    let mut collided_characters = Vec::new();
+    for (character_ent, character_image, character_sprite, character_sprite_sheet, character_pos) in
+        queries.q2().iter()
+    {
+        let character_image = if let Some(i) = image_assets.get(character_image) {
+            i
+        } else {
+            continue;
+        };
+        let character_sprite_sheet =
+            if let Some(i) = sprite_sheet_assets.get(character_sprite_sheet) {
+                i
+            } else {
+                continue;
+            };
+
+        for (layer, layer_image, layer_sprite, layer_pos) in queries.q3().iter() {
+            // Skip non-collision layers
+            if !layer
+                .layer_instance
+                .__identifier
+                .to_lowercase()
+                .contains("collision")
+            {
+                continue;
+            }
+
+            // Get the layer image
+            if let Some(layer_image) = image_assets.get(layer_image) {
+                if pixels_collide_with(
+                    PixelColliderInfo {
+                        image: character_image,
+                        position: character_pos,
+                        sprite: character_sprite,
+                        sprite_sheet: Some(character_sprite_sheet),
+                    },
+                    PixelColliderInfo {
+                        image: layer_image,
+                        position: layer_pos,
+                        sprite: layer_sprite,
+                        sprite_sheet: None,
+                    },
+                ) {
+                    collided_characters.push(character_ent);
+                }
+            }
+        }
+    }
+
+    // Move all collided characters back to their original locations
+    for collided_character_ent in collided_characters {
+        let (mut pos, state, _) = queries.q0_mut().get_mut(collided_character_ent).unwrap();
+        *pos = state.previous_position;
     }
 }
 

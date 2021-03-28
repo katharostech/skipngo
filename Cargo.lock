@@ -373,7 +373,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "cfg_aliases",
- "fixedbitset 0.3.2",
+ "euclid 0.22.2",
  "getrandom",
  "image",
  "luminance",
@@ -966,6 +966,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "euclid"
+version = "0.22.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51e5bac4ec41ece6346fd867815a57a221abdf48f4eb931b033789b5b4b6fc70"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "event-listener"
 version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1006,12 +1015,6 @@ name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ab347416e802de484e4d03c7316c48f1ecb56574dfd4a46a80f173ce1de04d"
-
-[[package]]
-name = "fixedbitset"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45e780567ed7abc415d12fd464571d265eb4a5710ddc97cdb1a31a4c35bb479d"
 
 [[package]]
 name = "fixedbitset"
@@ -1475,7 +1478,7 @@ dependencies = [
 name = "luminance-surfman"
 version = "0.0.0"
 dependencies = [
- "euclid",
+ "euclid 0.20.14",
  "gl",
  "luminance",
  "luminance-gl",
@@ -2332,7 +2335,7 @@ dependencies = [
  "core-foundation 0.6.4",
  "core-graphics 0.17.3",
  "display-link",
- "euclid",
+ "euclid 0.20.14",
  "gl_generator 0.14.0",
  "io-surface",
  "lazy_static",
