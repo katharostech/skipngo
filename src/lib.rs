@@ -97,6 +97,9 @@ pub struct EngineConfig {
         structopt(short = "A", long = "pixel-aspect-ratio", default_value = "1.0")
     )]
     pixel_aspect_ratio: f32,
+    /// Enable hot reloading game assets
+    #[cfg_attr(not(wasm), structopt(short = "R", long = "hot-reload"))]
+    hot_reload: bool,
 }
 
 #[cfg(not(wasm))]
@@ -137,6 +140,8 @@ impl EngineConfig {
             pixel_aspect_ratio: parse_url_query_string(&asset_url, "pixel_aspect_ratio")
                 .map(|x| x.parse().expect("Pixel aspect ratio not a number"))
                 .unwrap_or(1.0),
+            // Hot reload is not supported on web yet
+            hot_reload: false,
         }
     }
 }

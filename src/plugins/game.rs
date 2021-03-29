@@ -41,8 +41,13 @@ impl Plugin for GamePlugin {
 }
 
 /// Load the game info
-fn init(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn init(mut commands: Commands, asset_server: Res<AssetServer>, engine_config: Res<EngineConfig>) {
     let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
+
+    if engine_config.hot_reload {
+        asset_server.watch_for_changes().unwrap();
+    }
+
     commands.spawn().insert(game_info);
 }
 
