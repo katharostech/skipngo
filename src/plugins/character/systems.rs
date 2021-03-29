@@ -32,23 +32,21 @@ pub fn finish_spawning_character(
 
 /// Walk the character in response to input
 pub fn control_character<'a>(
-    mut queries: QuerySet<(
-        // Character mutation query
-        Query<(&mut Position, &mut CharacterState, &Handle<Character>)>,
-        // World positions so that we can synchronize them
-        WorldPositions,
-        // Character collision read query
-        Query<(Entity, &Handle<Character>, &Sprite, &WorldPosition)>,
-        // Query map layers
-        Query<(&LdtkMapLayer, &Handle<Image>, &Sprite, &WorldPosition)>,
-    )>,
+    mut world_positions: WorldPositionsQuery,
+    mut characters: Query<
+        (Entity, &Handle<Character>, &mut CharacterState, &Sprite),
+        With<Handle<Character>>,
+    >,
+    map_layers: Query<(Entity, &LdtkMapLayer, &Handle<Image>, &Sprite)>,
     character_assets: Res<Assets<Character>>,
     input: Res<Input<KeyCode>>,
     mut scene_graph: ResMut<SceneGraph>,
     image_assets: Res<Assets<Image>>,
 ) {
     // Loop through characters and move them
-    for (mut pos, mut state, character_handle) in queries.q0_mut().iter_mut() {
+    for (character_ent, character_handle, mut state, _) in characters.iter_mut() {
+        let mut pos = world_positions.get_local_position_mut(character_ent).unwrap();
+
         if character_assets.get(character_handle).is_some() {
             let mut direction = IVec2::default();
 
@@ -121,11 +119,12 @@ pub fn control_character<'a>(
     }
 
     // Synchronize world positions before checking for collisions
-    queries.q1_mut().sync_world_positions(&mut scene_graph);
+    world_positions.sync_world_positions(&mut scene_graph);
 
     // Check for collisions and record all the characters that collided
-    let mut collided_characters = Vec::new();
-    for (character_ent, character_handle, character_sprite, character_pos) in queries.q2().iter() {
+    for (character_ent, character_handle, character_state, character_sprite) in
+        characters.iter_mut()
+    {
         let character = if let Some(character) = character_assets.get(character_handle) {
             character
         } else {
@@ -138,7 +137,7 @@ pub fn control_character<'a>(
             continue;
         };
 
-        for (layer, layer_image, layer_sprite, layer_pos) in queries.q3().iter() {
+        for (layer_ent, layer, layer_image, layer_sprite) in map_layers.iter() {
             // Skip non-collision layers
             if !layer
                 .layer_instance
@@ -154,27 +153,27 @@ pub fn control_character<'a>(
                 if pixels_collide_with(
                     PixelColliderInfo {
                         image: character_collision,
-                        position: character_pos,
+                        position: &world_positions
+                            .get_world_position_mut(character_ent)
+                            .unwrap()
+                            .clone(),
                         sprite: character_sprite,
                         sprite_sheet: None,
                     },
                     PixelColliderInfo {
                         image: layer_image,
-                        position: layer_pos,
+                        position: &world_positions.get_world_position_mut(layer_ent).unwrap(),
                         sprite: layer_sprite,
                         sprite_sheet: None,
                     },
                 ) {
-                    collided_characters.push(character_ent);
+                    let mut character_local_pos =
+                        world_positions.get_local_position_mut(character_ent).unwrap();
+
+                    *character_local_pos = character_state.previous_position;
                 }
             }
         }
-    }
-
-    // Move all collided characters back to their original locations
-    for collided_character_ent in collided_characters {
-        let (mut pos, state, _) = queries.q0_mut().get_mut(collided_character_ent).unwrap();
-        *pos = state.previous_position;
     }
 }
 

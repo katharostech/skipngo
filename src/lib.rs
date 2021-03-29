@@ -15,11 +15,15 @@ pub mod plugins;
 pub mod wasm_utils;
 
 pub fn run() {
+    // Get logging config
     let log_config = get_log_config();
+    // Get the engine config
     let engine_config = EngineConfig::get_config();
 
+    // Create an app builder
     let mut builder = App::build();
 
+    // Build the app
     builder
         .insert_resource(WindowDescriptor {
             title: "Skip'n Go".into(),
