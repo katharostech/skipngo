@@ -88,7 +88,10 @@ pub struct EngineConfig {
     #[cfg_attr(not(wasm), structopt(short = "C", long = "enable-crt"))]
     enable_crt: bool,
     /// Set the pixel aspect ratio
-    #[cfg_attr(not(wasm), structopt(short = "A", long = "pixel-aspect-ratio", default_value = "1.0"))]
+    #[cfg_attr(
+        not(wasm),
+        structopt(short = "A", long = "pixel-aspect-ratio", default_value = "1.0")
+    )]
     pixel_aspect_ratio: f32,
 }
 
