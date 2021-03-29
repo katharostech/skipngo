@@ -63,7 +63,7 @@ fn await_init(
                 camera: Camera {
                     size: CameraSize::FixedHeight(game_info.viewport_height),
                     custom_shader: if engine_config.enable_crt {
-                        Some(CrtShader::default().get_shader())
+                        Some(include_str!("../shaders/crt.glsl").into())
                     } else {
                         None
                     },
