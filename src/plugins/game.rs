@@ -1,4 +1,4 @@
-use crate::plugins::character::*;
+use crate::{plugins::character::*, EngineConfig};
 use bevy::prelude::*;
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
@@ -53,6 +53,7 @@ fn await_init(
     game_info_assets: Res<Assets<GameInfo>>,
     asset_server: Res<AssetServer>,
     mut state: ResMut<State<GameState>>,
+    engine_config: Res<EngineConfig>,
 ) {
     // Spawn the map once the game info loads
     for game_info_handle in game_infos.iter() {
@@ -61,6 +62,12 @@ fn await_init(
             commands.spawn().insert_bundle(CameraBundle {
                 camera: Camera {
                     size: CameraSize::FixedHeight(game_info.viewport_height),
+                    custom_shader: if engine_config.enable_crt {
+                        Some(CrtShader::default().get_shader())
+                    } else {
+                        None
+                    },
+                    pixel_aspect_ratio: engine_config.pixel_aspect_ratio,
                     ..Default::default()
                 },
                 ..Default::default()

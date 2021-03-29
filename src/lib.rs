@@ -27,8 +27,9 @@ pub fn run() {
         })
         // Configure the asset directory
         .insert_resource(AssetServerSettings {
-            asset_folder: engine_config.asset_path,
+            asset_folder: engine_config.asset_path.clone(),
         })
+        .insert_resource(engine_config.clone())
         // Add the logging config
         .insert_resource(log_config)
         // Install Bevy Retro
@@ -62,8 +63,8 @@ use crate::wasm_utils::parse_url_query_string;
 #[cfg(wasm)]
 use wasm_utils::get_log_config;
 
-/// Game configuration provided exertnally i.e. commandline/URL query string
-#[derive(Debug)]
+/// Game configuration provided externally i.e. commandline/URL query string
+#[derive(Debug, Clone)]
 #[cfg_attr(not(wasm), derive(StructOpt))]
 #[cfg_attr(
     not(wasm),
@@ -77,12 +78,18 @@ pub struct EngineConfig {
     /// The path to the game asset directory
     #[cfg_attr(
         not(wasm),
-        structopt(short = "a", long = "asset_dir", default_value = "assets", parse(from_str = parse_asset_path))
+        structopt(short = "a", long = "asset-dir", default_value = "assets", parse(from_str = parse_asset_path))
     )]
     asset_path: String,
-    /// Whether or not to enable frame time diagnostics to the console
-    #[cfg_attr(not(wasm), structopt(short = "d", long = "frame_time_diagnostics"))]
+    /// Enable frame time diagnostics to the console
+    #[cfg_attr(not(wasm), structopt(short = "d", long = "frame-time-diagnostics"))]
     frame_time_diagnostics: bool,
+    /// Enable CRT screen filter
+    #[cfg_attr(not(wasm), structopt(short = "C", long = "enable-crt"))]
+    enable_crt: bool,
+    /// Set the pixel aspect ratio
+    #[cfg_attr(not(wasm), structopt(short = "A", long = "pixel-aspect-ratio"))]
+    pixel_aspect_ratio: f32,
 }
 
 #[cfg(not(wasm))]
@@ -117,6 +124,12 @@ impl EngineConfig {
             frame_time_diagnostics: parse_url_query_string(&asset_url, "frame_time_diagnostics")
                 .map(|x| x == "true")
                 .unwrap_or(false),
+            enable_crt: parse_url_query_string(&asset_url, "enable_crt")
+                .map(|x| x == "true")
+                .unwrap_or(false),
+            pixel_aspect_ratio: parse_url_query_string(&asset_url, "pixel_aspect_ratio")
+                .map(|x| x.parse().expect("Pixel aspect ratio not a number"))
+                .unwrap_or(1.0),
         }
     }
 }
