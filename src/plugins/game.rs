@@ -120,7 +120,14 @@ fn spawn_players(
             let player_start = entities_layer
                 .entity_instances
                 .iter()
-                .filter(|x| x.__identifier == "PlayerStart")
+                .filter(|x| {
+                    x.__identifier == "SpawnPoint"
+                        && x.field_instances
+                            .iter()
+                            .filter(|x| x.__identifier == "name" && x.__value == "PlayerStart")
+                            .next()
+                            .is_some()
+                })
                 .next()
                 .unwrap();
 

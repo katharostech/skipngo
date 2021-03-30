@@ -40,6 +40,10 @@ impl Plugin for CharacterPlugin {
             .add_system_to_stage(
                 CharacterStages::Game,
                 systems::animate_sprite_system.system(),
+            )
+            .add_system_to_stage(
+                CharacterStages::Game,
+                systems::change_level_system.system(),
             );
     }
 }

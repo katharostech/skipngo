@@ -48,7 +48,7 @@ pub fn control_character<'a>(
     // Synchronize world positions before checking for collisions
     world_positions.sync_world_positions(&mut scene_graph);
 
-    // Check for collisions and record all the characters that collided
+    // Loop through characters
     for (character_ent, character_handle, mut character_state, character_sprite) in
         characters.iter_mut()
     {
@@ -154,7 +154,7 @@ pub fn control_character<'a>(
                         sprite: character_sprite,
                         sprite_sheet: None,
                     };
-                    pixels_collide_with(character_collider, layer_collider)
+                    pixels_collide_with_pixels(character_collider, layer_collider)
                 };
 
                 // Perform ritual to check for collisions ( in a closure to make it easy to return early )
@@ -353,6 +353,170 @@ pub fn camera_follow_system(
                 // Make sure it is invisible
                 if **layer_visible {
                     **layer_visible = false;
+                }
+            }
+        }
+    }
+}
+
+pub fn change_level_system(
+    mut characters: Query<(Entity, &Handle<Character>, &Sprite)>,
+    mut world_positions: WorldPositionsQuery,
+    maps: Query<&Handle<LdtkMap>>,
+    map_assets: Res<Assets<LdtkMap>>,
+    mut scene_graph: ResMut<SceneGraph>,
+    image_assets: Res<Assets<Image>>,
+    character_assets: Res<Assets<Character>>,
+    current_level: Option<ResMut<CurrentLevel>>,
+) {
+    // Synchronize world positions before checking for collisions
+    world_positions.sync_world_positions(&mut scene_graph);
+
+    // Get the map
+    let map_handle = if let Some(map) = maps.iter().next() {
+        map
+    } else {
+        return;
+    };
+    let map = if let Some(map) = map_assets.get(map_handle) {
+        map
+    } else {
+        return;
+    };
+
+    // Get the current map level
+    let mut current_level = if let Some(level) = current_level {
+        level
+    } else {
+        return;
+    };
+    let level = map
+        .project
+        .levels
+        .iter()
+        .filter(|x| x.identifier == **current_level)
+        .next()
+        .unwrap();
+
+    // Loop through the characters
+    for (character_ent, character_handle, character_sprite) in characters.iter_mut() {
+        let character = if let Some(character) = character_assets.get(character_handle) {
+            character
+        } else {
+            continue;
+        };
+        let character_collision = if let Some(image) = image_assets.get(&character.collision_shape)
+        {
+            image
+        } else {
+            continue;
+        };
+
+        // For every entity layer in the level
+        for layer in level
+            .layer_instances
+            .as_ref()
+            .unwrap()
+            .iter()
+            .filter(|x| x.__type == "Entities")
+        {
+            // For every entrance entity
+            for entrance in layer
+                .entity_instances
+                .iter()
+                .filter(|x| x.__identifier == "Entrance")
+            {
+                // Get the pixel collider for the character
+                let character_collider = PixelColliderInfo {
+                    image: character_collision,
+                    // Add our movement vector to the world position
+                    world_position: &world_positions
+                        .get_world_position_mut(character_ent)
+                        .unwrap(),
+                    sprite: character_sprite,
+                    sprite_sheet: None,
+                };
+
+                // Get the bounding box for the entrance
+                let entrance_bounds = BoundingBox {
+                    min: IVec2::new(
+                        entrance.px[0] + level.world_x,
+                        entrance.px[1] + level.world_y,
+                    ),
+                    max: IVec2::new(
+                        entrance.px[0] + level.world_x + entrance.width,
+                        entrance.px[1] + level.world_y + entrance.height,
+                    ),
+                };
+
+                // If we have collided with the entrance
+                if pixels_collide_with_bounding_box(character_collider, entrance_bounds) {
+                    // Figure out where to teleport to
+                    let to_level_id = entrance
+                        .field_instances
+                        .iter()
+                        .filter(|x| x.__identifier == "to")
+                        .next()
+                        .unwrap()
+                        .__value
+                        .as_str()
+                        .unwrap();
+                    let to_spawn_point = entrance
+                        .field_instances
+                        .iter()
+                        .filter(|x| x.__identifier == "spawn_at")
+                        .next()
+                        .unwrap()
+                        .__value
+                        .as_str()
+                        .unwrap();
+
+                    // Get the level that we will be teleporting to
+                    let to_level = map
+                        .project
+                        .levels
+                        .iter()
+                        .filter(|x| x.identifier == to_level_id)
+                        .next()
+                        .unwrap();
+
+                    // Get the spawn point we will be teleporting to
+                    let spawn_point = to_level
+                        .layer_instances
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .find_map(|x| {
+                            x.entity_instances
+                                .iter()
+                                .filter(|x| {
+                                    x.__identifier == "SpawnPoint"
+                                        && x.field_instances
+                                            .iter()
+                                            .filter(|x| {
+                                                x.__identifier == "name"
+                                                    && x.__value == to_spawn_point
+                                            })
+                                            .next()
+                                            .is_some()
+                                })
+                                .next()
+                        })
+                        .unwrap();
+
+                    // Set the current level to the new level
+                    *current_level = CurrentLevel(to_level_id.into());
+
+                    // Get the character's position
+                    let mut character_pos = world_positions
+                        .get_local_position_mut(character_ent)
+                        .unwrap();
+
+                    *character_pos = Position::new(
+                        to_level.world_x + spawn_point.px[0],
+                        to_level.world_y + spawn_point.px[1],
+                        level.layer_instances.as_ref().unwrap().len() as i32 * 2,
+                    );
                 }
             }
         }
