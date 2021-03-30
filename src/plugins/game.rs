@@ -79,6 +79,11 @@ fn await_init(
         // Add the current level resource
         commands.insert_resource(CurrentLevel(game_info.starting_level.clone()));
 
+        // Enable hot reload if configured
+        if engine_config.hot_reload {
+            asset_server.watch_for_changes().unwrap();
+        }
+
         // Transition to running state
         state.set_push(GameState::LoadingMap).unwrap();
     }
