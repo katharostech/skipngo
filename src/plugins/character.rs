@@ -124,7 +124,6 @@ pub struct CharacterState {
     pub direction: CharacterStateDirection,
     pub tileset_index: u32,
     pub animation_frame: u16,
-    pub previous_position: Position,
 }
 
 impl Default for CharacterState {
@@ -134,7 +133,6 @@ impl Default for CharacterState {
             direction: CharacterStateDirection::Down,
             tileset_index: 0,
             animation_frame: 0,
-            previous_position: Position::default(),
         }
     }
 }

@@ -43,86 +43,11 @@ pub fn control_character<'a>(
     mut scene_graph: ResMut<SceneGraph>,
     image_assets: Res<Assets<Image>>,
 ) {
-    // Loop through characters and move them
-    for (character_ent, character_handle, mut state, _) in characters.iter_mut() {
-        let mut pos = world_positions.get_local_position_mut(character_ent).unwrap();
-
-        if character_assets.get(character_handle).is_some() {
-            let mut direction = IVec2::default();
-
-            // Determine movement direction
-            if input.pressed(KeyCode::Right) {
-                direction += IVec2::new(1, 0);
-            }
-            if input.pressed(KeyCode::Left) {
-                direction += IVec2::new(-1, 0);
-            }
-            if input.pressed(KeyCode::Down) {
-                direction += IVec2::new(0, 1);
-            }
-            if input.pressed(KeyCode::Up) {
-                direction += IVec2::new(0, -1);
-            }
-
-            // Determine animation and direction
-            let new_action;
-            let mut new_direction = state.direction;
-
-            if direction.x == 0 && direction.y == 0 {
-                new_action = CharacterStateAction::Idle;
-            } else {
-                new_action = CharacterStateAction::Walk;
-
-                if direction.y.abs() > 0 && direction.x.abs() > 0 {
-                    // We are moving diagnally, so the new direction should be the same as the
-                    // previous direction and we don't do anything.
-                } else if direction.y > 0 {
-                    new_direction = CharacterStateDirection::Down;
-                } else if direction.y < 0 {
-                    new_direction = CharacterStateDirection::Up;
-                } else if direction.x > 0 {
-                    new_direction = CharacterStateDirection::Right;
-                } else if direction.x < 0 {
-                    new_direction = CharacterStateDirection::Left;
-                }
-            }
-
-            // Update the character action
-            if new_action != state.action {
-                state.action = new_action;
-                state.tileset_index = 0;
-                state.animation_frame = 0;
-            }
-
-            // Make sure movement speed is normalized
-            if direction.x != 0 && direction.y != 0 {
-                if state.animation_frame % 2 == 0 {
-                    direction.y = 0;
-                    direction.x = 0;
-                }
-            }
-
-            if new_direction != state.direction {
-                state.direction = new_direction;
-                state.tileset_index = 0;
-                state.animation_frame = 0;
-            }
-
-            // Record the previous position so that we can move the player back in the collision
-            // detection system.
-            state.previous_position = pos.clone();
-
-            // Move the sprite
-            pos.x += direction.x;
-            pos.y += direction.y;
-        }
-    }
-
     // Synchronize world positions before checking for collisions
     world_positions.sync_world_positions(&mut scene_graph);
 
     // Check for collisions and record all the characters that collided
-    for (character_ent, character_handle, character_state, character_sprite) in
+    for (character_ent, character_handle, mut character_state, character_sprite) in
         characters.iter_mut()
     {
         let character = if let Some(character) = character_assets.get(character_handle) {
@@ -137,6 +62,60 @@ pub fn control_character<'a>(
             continue;
         };
 
+        let mut movement = IVec3::default();
+
+        // Determine movement direction
+        if input.pressed(KeyCode::Right) {
+            movement += IVec3::new(1, 0, 0);
+        }
+        if input.pressed(KeyCode::Left) {
+            movement += IVec3::new(-1, 0, 0);
+        }
+        if input.pressed(KeyCode::Down) {
+            movement += IVec3::new(0, 1, 0);
+        }
+        if input.pressed(KeyCode::Up) {
+            movement += IVec3::new(0, -1, 0);
+        }
+
+        // Determine animation and direction
+        let new_action;
+        let mut new_direction = character_state.direction;
+
+        if movement.x == 0 && movement.y == 0 {
+            new_action = CharacterStateAction::Idle;
+        } else {
+            new_action = CharacterStateAction::Walk;
+
+            if movement.y.abs() > 0 && movement.x.abs() > 0 {
+                // We are moving diagnally, so the new direction should be the same as the
+                // previous direction and we don't do anything.
+            } else if movement.y > 0 {
+                new_direction = CharacterStateDirection::Down;
+            } else if movement.y < 0 {
+                new_direction = CharacterStateDirection::Up;
+            } else if movement.x > 0 {
+                new_direction = CharacterStateDirection::Right;
+            } else if movement.x < 0 {
+                new_direction = CharacterStateDirection::Left;
+            }
+        }
+
+        // Reset character animation frame if direction or action changes
+        if new_direction != character_state.direction || new_action != character_state.action {
+            character_state.tileset_index = 0;
+            character_state.animation_frame = 0;
+        }
+        // Update character action
+        if new_action != character_state.action {
+            character_state.action = new_action;
+        }
+        // Update character direction
+        if new_direction != character_state.direction {
+            character_state.direction = new_direction;
+        }
+
+        // Check for collisions with map collision layers
         for (layer_ent, layer, layer_image, layer_sprite) in map_layers.iter() {
             // Skip non-collision layers
             if !layer
@@ -150,30 +129,87 @@ pub fn control_character<'a>(
 
             // Get the layer image
             if let Some(layer_image) = image_assets.get(layer_image) {
-                if pixels_collide_with(
-                    PixelColliderInfo {
+                // Get the world position of the player
+                let base_character_world_position = *world_positions
+                    .get_world_position_mut(character_ent)
+                    .unwrap()
+                    .clone();
+
+                // Create the collider info for the layer image
+                let layer_collider = PixelColliderInfo {
+                    image: layer_image,
+                    world_position: &world_positions.get_world_position_mut(layer_ent).unwrap(),
+                    sprite: layer_sprite,
+                    sprite_sheet: None,
+                };
+
+                // Create the character collider information
+                let collides = |movement| {
+                    let character_collider = PixelColliderInfo {
                         image: character_collision,
-                        position: &world_positions
-                            .get_world_position_mut(character_ent)
-                            .unwrap()
-                            .clone(),
+                        // Add our movement vector to the world position
+                        world_position: &(base_character_world_position + movement),
                         sprite: character_sprite,
                         sprite_sheet: None,
-                    },
-                    PixelColliderInfo {
-                        image: layer_image,
-                        position: &world_positions.get_world_position_mut(layer_ent).unwrap(),
-                        sprite: layer_sprite,
-                        sprite_sheet: None,
-                    },
-                ) {
-                    let mut character_local_pos =
-                        world_positions.get_local_position_mut(character_ent).unwrap();
+                    };
+                    pixels_collide_with(character_collider, layer_collider)
+                };
 
-                    *character_local_pos = character_state.previous_position;
+                // Perform ritual to check for collisions ( in a closure to make it easy to return early )
+                let has_collided = (|| {
+                    // If our current movement would cause a collision
+                    if collides(movement) {
+                        // Try setting x movement to nothing and check again
+                        if movement.x != 0 {
+                            let mut new_movement = movement.clone();
+                            new_movement.x = 0;
+
+                            if !collides(new_movement) {
+                                *movement = *new_movement;
+                                return false;
+                            }
+                        }
+
+                        // Try setting y movement to nothing and check again
+                        if movement.y != 0 {
+                            let mut new_movement = movement.clone();
+                            new_movement.y = 0;
+
+                            if !collides(new_movement) {
+                                *movement = *new_movement;
+                                return false;
+                            }
+                        }
+
+                        // If we are still colliding, just set movement to nothing and break out of this loop
+                        *movement = *IVec3::ZERO;
+                        return true;
+
+                    // If movement would not cause a collision just return false
+                    } else {
+                        false
+                    }
+                })();
+
+                if has_collided {
+                    break;
                 }
             }
         }
+
+        // Make sure moving diagonal does not make us go faster
+        if movement.x != 0 && movement.y != 0 {
+            if character_state.animation_frame % 2 == 0 {
+                movement.y = 0;
+                movement.x = 0;
+            }
+        }
+
+        // Move the player
+        let mut pos = world_positions
+            .get_local_position_mut(character_ent)
+            .unwrap();
+        **pos += movement;
     }
 }
 
