@@ -261,15 +261,64 @@ pub fn animate_sprite_system(
     }
 }
 
-/// Make the camera follow the character
-pub fn camera_follow(
-    mut cameras: Query<&mut Position, With<Camera>>,
+// Make the camera follow the character
+pub fn camera_follow_system(
+    mut cameras: Query<(&Camera, &mut Position)>,
     characters: Query<&Position, (With<Handle<Character>>, Without<Camera>)>,
+    map_layers: Query<(&Handle<Image>, &Position), (With<LdtkMapLayer>, Without<Camera>)>,
+    windows: Res<Windows>,
+    image_assets: Res<Assets<Image>>,
 ) {
-    if let Some(mut camera_trans) = cameras.iter_mut().next() {
-        if let Some(character_trans) = characters.iter().next() {
-            camera_trans.x = character_trans.x;
-            camera_trans.y = character_trans.y;
+    if let Some((camera, mut camera_pos)) = cameras.iter_mut().next() {
+        // Start by making the camera stick to the player
+        if let Some(character_pos) = characters.iter().next() {
+            camera_pos.x = character_pos.x;
+            camera_pos.y = character_pos.y;
+        }
+
+        // If there is a spawned map layer we can find, we want to make sure the camera doesn't show
+        // outside the edges of the map. ( we don't really care which layer because they should all
+        // be the same size )
+        if let Some((layer_image_handle, layer_pos)) = map_layers.iter().next() {
+            // Get the layer image
+            let layer_image = if let Some(image) = image_assets.get(layer_image_handle) {
+                image
+            } else {
+                return;
+            };
+
+            let (layer_width, layer_height) = layer_image.dimensions();
+            let layer_min_x = layer_pos.x;
+            let layer_max_x = layer_pos.x + layer_width as i32;
+            let layer_min_y = layer_pos.y;
+            let layer_max_y = layer_pos.y + layer_height as i32;
+
+            // Get the camera target size
+            let camera_size = camera.get_target_size(windows.get_primary().unwrap());
+            let camera_min_x = camera_pos.x - camera_size.x as i32 / 2;
+            let camera_max_x = (camera_pos.x - camera_size.x as i32 / 2) + camera_size.x as i32;
+            let camera_min_y = camera_pos.y - camera_size.y as i32 / 2;
+            let camera_max_y = (camera_pos.y - camera_size.y as i32 / 2) + camera_size.y as i32;
+
+            if layer_width > camera_size.x {
+                if layer_min_x > camera_min_x {
+                    camera_pos.x += layer_min_x - camera_min_x;
+                }
+
+                if layer_max_x < camera_max_x {
+                    camera_pos.x -= camera_max_x - layer_max_x;
+                }
+            }
+
+            if layer_height > camera_size.y {
+                if layer_min_y > camera_min_y {
+                    camera_pos.y += layer_min_y - camera_min_y;
+                }
+
+                if layer_max_y < camera_max_y {
+                    camera_pos.y -= camera_max_y - layer_max_y;
+                }
+            }
         }
     }
 }

@@ -30,7 +30,7 @@ impl Plugin for CharacterPlugin {
             )
             .add_system_to_stage(
                 CharacterStages::CameraFollow,
-                systems::camera_follow.system(),
+                systems::camera_follow_system.system(),
             )
             .add_system_to_stage(
                 CharacterStages::Game,
