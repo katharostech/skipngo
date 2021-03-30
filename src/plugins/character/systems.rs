@@ -2,6 +2,8 @@ use bevy::prelude::*;
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
 
+use crate::plugins::game::CurrentLevel;
+
 use super::*;
 
 pub struct CharacterLoaded;
@@ -265,10 +267,20 @@ pub fn animate_sprite_system(
 pub fn camera_follow_system(
     mut cameras: Query<(&Camera, &mut Position)>,
     characters: Query<&Position, (With<Handle<Character>>, Without<Camera>)>,
-    map_layers: Query<(&Handle<Image>, &Position), (With<LdtkMapLayer>, Without<Camera>)>,
+    mut map_layers: Query<
+        (&mut LdtkMapLayer, &mut Visible, &Handle<Image>, &Position),
+        Without<Camera>,
+    >,
     windows: Res<Windows>,
     image_assets: Res<Assets<Image>>,
+    current_level: Option<Res<CurrentLevel>>,
 ) {
+    let current_level = if let Some(level) = current_level {
+        level
+    } else {
+        return;
+    };
+
     if let Some((camera, mut camera_pos)) = cameras.iter_mut().next() {
         // Start by making the camera stick to the player
         if let Some(character_pos) = characters.iter().next() {
@@ -279,44 +291,68 @@ pub fn camera_follow_system(
         // If there is a spawned map layer we can find, we want to make sure the camera doesn't show
         // outside the edges of the map. ( we don't really care which layer because they should all
         // be the same size )
-        if let Some((layer_image_handle, layer_pos)) = map_layers.iter().next() {
-            // Get the layer image
-            let layer_image = if let Some(image) = image_assets.get(layer_image_handle) {
-                image
+        let mut has_constrained_camera = false;
+        for (layer, mut layer_visible, layer_image_handle, layer_pos) in map_layers.iter_mut() {
+            // If this layer is a part of the current level
+            if layer.level_identifier == **current_level {
+                // Make sure the layer is visible ( if it's supposed to be )
+                if !**layer_visible {
+                    **layer_visible = layer.layer_instance.visible;
+                }
+
+                if !has_constrained_camera {
+                    // Get the layer image
+                    let layer_image = if let Some(image) = image_assets.get(layer_image_handle) {
+                        image
+                    } else {
+                        return;
+                    };
+
+                    // Get the layer bounds
+                    let (layer_width, layer_height) = layer_image.dimensions();
+                    let layer_min_x = layer_pos.x;
+                    let layer_max_x = layer_pos.x + layer_width as i32;
+                    let layer_min_y = layer_pos.y;
+                    let layer_max_y = layer_pos.y + layer_height as i32;
+
+                    // Get the camera target size
+                    let camera_size = camera.get_target_size(windows.get_primary().unwrap());
+                    let camera_min_x = camera_pos.x - camera_size.x as i32 / 2;
+                    let camera_max_x =
+                        (camera_pos.x - camera_size.x as i32 / 2) + camera_size.x as i32;
+                    let camera_min_y = camera_pos.y - camera_size.y as i32 / 2;
+                    let camera_max_y =
+                        (camera_pos.y - camera_size.y as i32 / 2) + camera_size.y as i32;
+
+                    // Constrain the camera to the layer size
+                    if layer_width > camera_size.x {
+                        if layer_min_x > camera_min_x {
+                            camera_pos.x += layer_min_x - camera_min_x;
+                        }
+
+                        if layer_max_x < camera_max_x {
+                            camera_pos.x -= camera_max_x - layer_max_x;
+                        }
+                    }
+
+                    if layer_height > camera_size.y {
+                        if layer_min_y > camera_min_y {
+                            camera_pos.y += layer_min_y - camera_min_y;
+                        }
+
+                        if layer_max_y < camera_max_y {
+                            camera_pos.y -= camera_max_y - layer_max_y;
+                        }
+                    }
+
+                    has_constrained_camera = true;
+                }
+
+            // If the layer is not a part of the current level
             } else {
-                return;
-            };
-
-            let (layer_width, layer_height) = layer_image.dimensions();
-            let layer_min_x = layer_pos.x;
-            let layer_max_x = layer_pos.x + layer_width as i32;
-            let layer_min_y = layer_pos.y;
-            let layer_max_y = layer_pos.y + layer_height as i32;
-
-            // Get the camera target size
-            let camera_size = camera.get_target_size(windows.get_primary().unwrap());
-            let camera_min_x = camera_pos.x - camera_size.x as i32 / 2;
-            let camera_max_x = (camera_pos.x - camera_size.x as i32 / 2) + camera_size.x as i32;
-            let camera_min_y = camera_pos.y - camera_size.y as i32 / 2;
-            let camera_max_y = (camera_pos.y - camera_size.y as i32 / 2) + camera_size.y as i32;
-
-            if layer_width > camera_size.x {
-                if layer_min_x > camera_min_x {
-                    camera_pos.x += layer_min_x - camera_min_x;
-                }
-
-                if layer_max_x < camera_max_x {
-                    camera_pos.x -= camera_max_x - layer_max_x;
-                }
-            }
-
-            if layer_height > camera_size.y {
-                if layer_min_y > camera_min_y {
-                    camera_pos.y += layer_min_y - camera_min_y;
-                }
-
-                if layer_max_y < camera_max_y {
-                    camera_pos.y -= camera_max_y - layer_max_y;
+                // Make sure it is invisible
+                if **layer_visible {
+                    **layer_visible = false;
                 }
             }
         }

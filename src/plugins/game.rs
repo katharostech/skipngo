@@ -17,6 +17,11 @@ pub enum GameState {
 /// Plugin responsible for booting and handling core game stuff
 pub struct GamePlugin;
 
+/// The current map level the player is in
+#[derive(Clone)]
+pub struct CurrentLevel(pub String);
+impl_deref!(CurrentLevel, String);
+
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut AppBuilder) {
         app
@@ -25,10 +30,6 @@ impl Plugin for GamePlugin {
             .add_asset_loader(GameInfoLoader::default())
             // Add game state
             .add_state(GameState::LoadingGameInfo)
-            // Add game init sysem
-            .add_system_set(
-                SystemSet::on_enter(GameState::LoadingGameInfo).with_system(init.system()),
-            )
             // Add the system to wait for game initialization
             .add_system_set(
                 SystemSet::on_update(GameState::LoadingGameInfo).with_system(await_init.system()),
@@ -40,57 +41,46 @@ impl Plugin for GamePlugin {
     }
 }
 
-/// Load the game info
-fn init(mut commands: Commands, asset_server: Res<AssetServer>, engine_config: Res<EngineConfig>) {
-    let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
-
-    if engine_config.hot_reload {
-        asset_server.watch_for_changes().unwrap();
-    }
-
-    commands.spawn().insert(game_info);
-}
-
 /// Wait for the game info to load and spawn the map
 fn await_init(
     mut commands: Commands,
-    game_infos: Query<&Handle<GameInfo>>,
     game_info_assets: Res<Assets<GameInfo>>,
     asset_server: Res<AssetServer>,
     mut state: ResMut<State<GameState>>,
     engine_config: Res<EngineConfig>,
 ) {
+    let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
+
     // Spawn the map once the game info loads
-    for game_info_handle in game_infos.iter() {
-        if let Some(game_info) = game_info_assets.get(game_info_handle) {
-            // Spawn the camera
-            commands.spawn().insert_bundle(CameraBundle {
-                camera: Camera {
-                    size: CameraSize::FixedHeight(game_info.viewport_height),
-                    custom_shader: if engine_config.enable_crt {
-                        Some(CrtShader::default().get_shader())
-                    } else {
-                        None
-                    },
-                    pixel_aspect_ratio: engine_config.pixel_aspect_ratio,
-                    ..Default::default()
+    if let Some(game_info) = game_info_assets.get(game_info) {
+        // Spawn the camera
+        commands.spawn().insert_bundle(CameraBundle {
+            camera: Camera {
+                size: CameraSize::FixedHeight(game_info.viewport_height),
+                custom_shader: if engine_config.enable_crt {
+                    Some(CrtShader::default().get_shader())
+                } else {
+                    None
                 },
+                pixel_aspect_ratio: engine_config.pixel_aspect_ratio,
                 ..Default::default()
-            });
+            },
+            ..Default::default()
+        });
 
-            // Spawn the map
-            commands.spawn().insert_bundle(LdtkMapBundle {
-                map: asset_server.load(game_info.map.as_str()),
-                config: LdtkMapConfig {
-                    set_clear_color: true,
-                    ..Default::default()
-                },
-                ..Default::default()
-            });
+        // Spawn the map
+        commands.spawn().insert_bundle(LdtkMapBundle {
+            map: asset_server.load(game_info.map.as_str()),
+            ..Default::default()
+        });
 
-            // Transition to running state
-            state.set_push(GameState::LoadingMap).unwrap();
-        }
+        // Add the game info as a resource
+        commands.insert_resource(game_info.clone());
+        // Add the current level resource
+        commands.insert_resource(CurrentLevel(game_info.starting_level.clone()));
+
+        // Transition to running state
+        state.set_push(GameState::LoadingMap).unwrap();
     }
 }
 
@@ -100,16 +90,18 @@ fn spawn_players(
     map_assets: Res<Assets<LdtkMap>>,
     mut state: ResMut<State<GameState>>,
     asset_server: Res<AssetServer>,
-    game_info: Query<&Handle<GameInfo>>,
-    game_info_assets: Res<Assets<GameInfo>>,
+    game_info: Res<GameInfo>,
+    current_level: Res<CurrentLevel>,
 ) {
-    let game_info = game_info_assets
-        .get(game_info.iter().next().unwrap())
-        .unwrap();
-
     for map_handle in map_query.iter() {
         if let Some(map) = map_assets.get(map_handle) {
-            let level = &map.project.levels[0];
+            let level = &map
+                .project
+                .levels
+                .iter()
+                .filter(|x| x.identifier == **current_level)
+                .next()
+                .unwrap();
 
             let entities_layer = level
                 .layer_instances
@@ -142,7 +134,11 @@ fn spawn_players(
                 character: character_handle,
                 sprite_bundle: SpriteBundle {
                     image: character_image_handle,
-                    position: Position::new(player_start.px[0], player_start.px[1], player_z),
+                    position: Position::new(
+                        player_start.px[0] + level.world_x,
+                        player_start.px[1] + level.world_y,
+                        player_z,
+                    ),
                     ..Default::default()
                 },
                 sprite_sheet: character_spritesheet_handle,
@@ -166,12 +162,13 @@ mod asset {
 
     use super::*;
 
-    #[derive(Deserialize, TypeUuid)]
+    #[derive(Deserialize, TypeUuid, Clone)]
     #[serde(deny_unknown_fields)]
     #[serde(rename_all = "kebab-case")]
     #[uuid = "c19826f5-e474-4ad0-a0fc-c24f144a1b79"]
     pub struct GameInfo {
         pub map: String,
+        pub starting_level: String,
         pub player_character: String,
         pub viewport_height: u32,
     }
