@@ -43,10 +43,18 @@ pub fn run() {
         // Add our SkipnGo plugins
         .add_plugins(plugins::SkipnGoPlugins);
 
+    // Enable diagnostics
     if engine_config.frame_time_diagnostics {
         builder
             .add_plugin(FrameTimeDiagnosticsPlugin)
             .add_plugin(LogDiagnosticsPlugin::default());
+    }
+
+    // Enable hot reload
+    if engine_config.hot_reload {
+        let world = builder.world();
+        let asset_server = world.get_resource::<AssetServer>().unwrap();
+        asset_server.watch_for_changes().unwrap();
     }
 
     // Start the game!
