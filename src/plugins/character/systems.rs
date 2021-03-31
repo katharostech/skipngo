@@ -360,6 +360,7 @@ pub fn camera_follow_system(
 }
 
 pub fn change_level_system(
+    mut cameras: Query<&mut Camera>,
     mut characters: Query<(Entity, &Handle<Character>, &Sprite)>,
     mut world_positions: WorldPositionsQuery,
     maps: Query<&Handle<LdtkMap>>,
@@ -506,6 +507,22 @@ pub fn change_level_system(
 
                     // Set the current level to the new level
                     *current_level = CurrentLevel(to_level_id.into());
+
+                    // Set the camera background to the level background color
+                    for mut camera in cameras.iter_mut() {
+                        let decoded = hex::decode(
+                            to_level
+                                .bg_color
+                                .as_ref()
+                                .unwrap_or(&map.project.default_level_bg_color)
+                                .strip_prefix("#")
+                                .expect("Invalid background color"),
+                        )
+                        .expect("Invalid background color");
+
+                        camera.background_color =
+                            Color::from_rgba8(decoded[0], decoded[1], decoded[2], 1);
+                    }
 
                     // Get the character's position
                     let mut character_pos = world_positions
