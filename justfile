@@ -17,13 +17,13 @@ build-release-cross-windows:
 build-web:
     cargo build --target wasm32-unknown-unknown
     wasm-bindgen --out-dir target/wasm --target web target/wasm32-unknown-unknown/debug/skipngo.wasm
-    cp wasm_resources/index.tpl.html target/wasm/index.html
+    cp wasm_resources/index.html target/wasm/index.html
     mkdir -p target/wasm
 
 build-release-web:
     cargo build --target wasm32-unknown-unknown --release
     wasm-bindgen --out-dir target/wasm-dist --no-typescript --target web target/wasm32-unknown-unknown/release/skipngo.wasm
-    cp wasm_resources/index.tpl.html target/wasm-dist/index.html
+    cp wasm_resources/index.html target/wasm-dist/index.html
 
 run *args:
     cargo run {{dev_features}} -- {{args}}
