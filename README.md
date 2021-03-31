@@ -1,4 +1,4 @@
-# Skip'n go
+# Skip'n Go
 
 [![Crates.io](https://img.shields.io/crates/v/skipngo.svg)](https://crates.io/crates/skipngo)
 [![Docs.rs](https://docs.rs/skipngo/badge.svg)](https://docs.rs/skipngo)
@@ -10,5 +10,5 @@ Skip'n Go is a game engine designed to let you make 2D games as easily as possib
 
 The game engine is powered by the Rust programming language and the [Bevy] game engine, but Rust will not be required to write Skip'n Go games. Games will be written by simply editing YAML files, [LDtk] map files, sprite images and tilesets, and, in the future, probably, Python scripts.
 
-[Bevy]: https://bevyengine.org
-[LDtk]: https://ldtk.io
+[bevy]: https://bevyengine.org
+[ldtk]: https://ldtk.io
