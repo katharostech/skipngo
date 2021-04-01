@@ -48,6 +48,7 @@ fn await_init(
     asset_server: Res<AssetServer>,
     mut state: ResMut<State<GameState>>,
     engine_config: Res<EngineConfig>,
+    #[cfg(not(wasm))] mut windows: ResMut<Windows>,
 ) {
     let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
 
@@ -67,6 +68,19 @@ fn await_init(
             },
             ..Default::default()
         });
+
+        // Update the window title
+        #[cfg(not(wasm))]
+        windows
+            .get_primary_mut()
+            .unwrap()
+            .set_title(game_info.title.clone());
+        #[cfg(wasm)]
+        web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .set_title(&game_info.title);
 
         // Spawn the map
         commands.spawn().insert_bundle(LdtkMapBundle {
@@ -174,6 +188,7 @@ mod asset {
     #[serde(rename_all = "kebab-case")]
     #[uuid = "c19826f5-e474-4ad0-a0fc-c24f144a1b79"]
     pub struct GameInfo {
+        pub title: String,
         pub map: String,
         pub starting_level: String,
         pub player_character: String,

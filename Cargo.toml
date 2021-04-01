@@ -28,7 +28,7 @@ anyhow = "1.0.38"
 hex = "0.4.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-web-sys = { version = "0.3.48", features = ["Window", "Location"] }
+web-sys = { version = "0.3.48", features = ["Window", "Location", "Document"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 structopt = "0.3.21"
