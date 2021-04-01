@@ -46,3 +46,6 @@ opt-level = 1
 
 [profile.release]
 lto = true
+
+[patch.crates-io]
+winit = { git = "https://github.com/katharostech/winit", branch = "web-sys-touch-events" }

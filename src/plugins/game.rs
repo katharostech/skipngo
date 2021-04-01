@@ -4,7 +4,7 @@ use bevy_retro::*;
 use bevy_retro_ldtk::*;
 
 /// The game states
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GameState {
     /// The game is loading initial game data and spawning the initial items
     LoadingGameInfo,
@@ -80,7 +80,7 @@ fn await_init(
         commands.insert_resource(CurrentLevel(game_info.starting_level.clone()));
 
         // Transition to running state
-        state.set_push(GameState::LoadingMap).unwrap();
+        state.push(GameState::LoadingMap).unwrap();
     }
 }
 
@@ -153,7 +153,7 @@ fn spawn_players(
             });
 
             // Go to the running state
-            state.set_push(GameState::Running).unwrap();
+            state.push(GameState::Running).unwrap();
         }
     }
 }

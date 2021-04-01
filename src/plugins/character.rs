@@ -7,6 +7,8 @@ pub mod systems;
 
 use loader::CharacterLoader;
 
+use self::systems::ControlEvent;
+
 pub struct CharacterPlugin;
 
 #[derive(Eq, PartialEq, StageLabel, Clone, Hash, Debug)]
@@ -19,6 +21,7 @@ impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut bevy::prelude::AppBuilder) {
         app.add_asset::<Character>()
             .init_asset_loader::<CharacterLoader>()
+            .add_event::<ControlEvent>()
             .add_stage(
                 CharacterStages::Game,
                 SystemStage::parallel().with_run_criteria(FixedTimestep::step(0.012)),
@@ -36,15 +39,19 @@ impl Plugin for CharacterPlugin {
                 CharacterStages::Game,
                 systems::finish_spawning_character.system(),
             )
-            .add_system_to_stage(CharacterStages::Game, systems::control_character.system())
+            .add_system_to_stage(
+                CharacterStages::Game,
+                systems::touch_control_input_system.system().chain(
+                    systems::keyboard_control_input_system
+                        .system()
+                        .chain(systems::control_character.system()),
+                ),
+            )
             .add_system_to_stage(
                 CharacterStages::Game,
                 systems::animate_sprite_system.system(),
             )
-            .add_system_to_stage(
-                CharacterStages::Game,
-                systems::change_level_system.system(),
-            );
+            .add_system_to_stage(CharacterStages::Game, systems::change_level_system.system());
     }
 }
 

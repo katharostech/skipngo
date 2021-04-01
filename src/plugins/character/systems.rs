@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashSet};
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
 
@@ -7,6 +7,82 @@ use crate::plugins::game::CurrentLevel;
 use super::*;
 
 pub struct CharacterLoaded;
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub enum ControlEvent {
+    MoveUp,
+    MoveDown,
+    MoveLeft,
+    MoveRight,
+}
+
+const TOUCH_INPUT_DEAD_ZONE: f32 = 20.0;
+pub fn touch_control_input_system(
+    mut tracked_touch: Local<Option<u64>>,
+    mut touch_events: EventReader<TouchInput>,
+    mut control_events: EventWriter<ControlEvent>,
+    touches: Res<Touches>,
+) {
+    for touch in touch_events.iter() {
+        if let Some(&id) = tracked_touch.as_ref() {
+            if touch.id == id {
+                match touch.phase {
+                    bevy::input::touch::TouchPhase::Ended
+                    | bevy::input::touch::TouchPhase::Cancelled => *tracked_touch = None,
+                    _ => (),
+                }
+            }
+        } else {
+            *tracked_touch = Some(touch.id);
+        }
+    }
+
+    if let Some(&id) = tracked_touch.as_ref() {
+        if let Some(touch) = touches.get_pressed(id) {
+            // Get the difference in the positions
+            let diff = touch.position() - touch.start_position();
+
+            if diff.x.abs() > TOUCH_INPUT_DEAD_ZONE && diff.x > 0. {
+                control_events.send(ControlEvent::MoveRight);
+            }
+
+            if diff.x.abs() > TOUCH_INPUT_DEAD_ZONE && diff.x < 0. {
+                control_events.send(ControlEvent::MoveLeft);
+            }
+
+            if diff.y.abs() > TOUCH_INPUT_DEAD_ZONE && diff.y > 0. {
+                control_events.send(ControlEvent::MoveDown);
+            }
+
+            if diff.y.abs() > TOUCH_INPUT_DEAD_ZONE && diff.y < 0. {
+                control_events.send(ControlEvent::MoveUp);
+            }
+        } else {
+            *tracked_touch = None;
+        }
+    }
+}
+
+pub fn keyboard_control_input_system(
+    mut control_events: EventWriter<ControlEvent>,
+    keyboard_input: Res<Input<KeyCode>>,
+) {
+    if keyboard_input.pressed(KeyCode::Left) {
+        control_events.send(ControlEvent::MoveLeft);
+    }
+
+    if keyboard_input.pressed(KeyCode::Right) {
+        control_events.send(ControlEvent::MoveRight);
+    }
+
+    if keyboard_input.pressed(KeyCode::Up) {
+        control_events.send(ControlEvent::MoveUp);
+    }
+
+    if keyboard_input.pressed(KeyCode::Down) {
+        control_events.send(ControlEvent::MoveDown);
+    }
+}
 
 /// Add the sprite image and sprite sheet handles to the spawned character
 pub fn finish_spawning_character(
@@ -41,9 +117,9 @@ pub fn control_character<'a>(
     >,
     map_layers: Query<(Entity, &LdtkMapLayer, &Handle<Image>, &Sprite)>,
     character_assets: Res<Assets<Character>>,
-    input: Res<Input<KeyCode>>,
     mut scene_graph: ResMut<SceneGraph>,
     image_assets: Res<Assets<Image>>,
+    mut control_events: EventReader<ControlEvent>,
 ) {
     // Synchronize world positions before checking for collisions
     world_positions.sync_world_positions(&mut scene_graph);
@@ -67,17 +143,16 @@ pub fn control_character<'a>(
         let mut movement = IVec3::default();
 
         // Determine movement direction
-        if input.pressed(KeyCode::Right) {
-            movement += IVec3::new(1, 0, 0);
-        }
-        if input.pressed(KeyCode::Left) {
-            movement += IVec3::new(-1, 0, 0);
-        }
-        if input.pressed(KeyCode::Down) {
-            movement += IVec3::new(0, 1, 0);
-        }
-        if input.pressed(KeyCode::Up) {
-            movement += IVec3::new(0, -1, 0);
+        let mut directions = HashSet::default();
+        for control_event in control_events.iter() {
+            if directions.insert(control_event) {
+                match control_event {
+                    ControlEvent::MoveUp => movement += IVec3::new(0, -1, 0),
+                    ControlEvent::MoveDown => movement += IVec3::new(0, 1, 0),
+                    ControlEvent::MoveLeft => movement += IVec3::new(-1, 0, 0),
+                    ControlEvent::MoveRight => movement += IVec3::new(1, 0, 0),
+                }
+            }
         }
 
         // Determine animation and direction
