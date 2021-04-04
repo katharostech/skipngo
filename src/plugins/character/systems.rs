@@ -16,7 +16,6 @@ pub enum ControlEvent {
     MoveRight,
 }
 
-const TOUCH_INPUT_DEAD_ZONE: f32 = 20.0;
 pub fn touch_control_input_system(
     mut tracked_touch: Local<Option<u64>>,
     mut touch_events: EventReader<TouchInput>,
@@ -42,19 +41,19 @@ pub fn touch_control_input_system(
             // Get the difference in the positions
             let diff = touch.position() - touch.start_position();
 
-            if diff.x.abs() > TOUCH_INPUT_DEAD_ZONE && diff.x > 0. {
+            if diff.x > 0. {
                 control_events.send(ControlEvent::MoveRight);
             }
 
-            if diff.x.abs() > TOUCH_INPUT_DEAD_ZONE && diff.x < 0. {
+            if diff.x < 0. {
                 control_events.send(ControlEvent::MoveLeft);
             }
 
-            if diff.y.abs() > TOUCH_INPUT_DEAD_ZONE && diff.y > 0. {
+            if diff.y > 0. {
                 control_events.send(ControlEvent::MoveDown);
             }
 
-            if diff.y.abs() > TOUCH_INPUT_DEAD_ZONE && diff.y < 0. {
+            if diff.y < 0. {
                 control_events.send(ControlEvent::MoveUp);
             }
         } else {
