@@ -1,3 +1,6 @@
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
+
 use bevy::{prelude::*, utils::HashSet};
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
@@ -108,7 +111,7 @@ pub fn finish_spawning_character(
 }
 
 /// Walk the character in response to input
-pub fn control_character<'a>(
+pub fn control_character(
     mut world_positions: WorldPositionsQuery,
     mut characters: Query<
         (Entity, &Handle<Character>, &mut CharacterState, &Sprite),
@@ -206,10 +209,9 @@ pub fn control_character<'a>(
             // Get the layer image
             if let Some(layer_image) = image_assets.get(layer_image) {
                 // Get the world position of the player
-                let base_character_world_position = *world_positions
+                let base_character_world_position = **world_positions
                     .get_world_position_mut(character_ent)
-                    .unwrap()
-                    .clone();
+                    .unwrap();
 
                 // Create the collider info for the layer image
                 let layer_collider = PixelColliderInfo {
@@ -237,7 +239,7 @@ pub fn control_character<'a>(
                     if collides(movement) {
                         // Try setting x movement to nothing and check again
                         if movement.x != 0 {
-                            let mut new_movement = movement.clone();
+                            let mut new_movement = movement;
                             new_movement.x = 0;
 
                             if !collides(new_movement) {
@@ -248,7 +250,7 @@ pub fn control_character<'a>(
 
                         // Try setting y movement to nothing and check again
                         if movement.y != 0 {
-                            let mut new_movement = movement.clone();
+                            let mut new_movement = movement;
                             new_movement.y = 0;
 
                             if !collides(new_movement) {
@@ -259,7 +261,8 @@ pub fn control_character<'a>(
 
                         // If we are still colliding, just set movement to nothing and break out of this loop
                         *movement = *IVec3::ZERO;
-                        return true;
+
+                        true
 
                     // If movement would not cause a collision just return false
                     } else {
@@ -274,11 +277,9 @@ pub fn control_character<'a>(
         }
 
         // Make sure moving diagonal does not make us go faster
-        if movement.x != 0 && movement.y != 0 {
-            if character_state.animation_frame % 2 == 0 {
-                movement.y = 0;
-                movement.x = 0;
-            }
+        if movement.x != 0 && movement.y != 0 && character_state.animation_frame % 2 == 0 {
+            movement.y = 0;
+            movement.x = 0;
         }
 
         // Move the player
@@ -469,8 +470,7 @@ pub fn change_level_system(
         .project
         .levels
         .iter()
-        .filter(|x| x.identifier == **current_level)
-        .next()
+        .find(|x| x.identifier == **current_level)
         .unwrap();
 
     // Loop through the characters
@@ -530,8 +530,7 @@ pub fn change_level_system(
                     let to_level_id = entrance
                         .field_instances
                         .iter()
-                        .filter(|x| x.__identifier == "to")
-                        .next()
+                        .find(|x| x.__identifier == "to")
                         .unwrap()
                         .__value
                         .as_str()
@@ -539,8 +538,7 @@ pub fn change_level_system(
                     let to_spawn_point = entrance
                         .field_instances
                         .iter()
-                        .filter(|x| x.__identifier == "spawn_at")
-                        .next()
+                        .find(|x| x.__identifier == "spawn_at")
                         .unwrap()
                         .__value
                         .as_str()
@@ -551,8 +549,7 @@ pub fn change_level_system(
                         .project
                         .levels
                         .iter()
-                        .filter(|x| x.identifier == to_level_id)
-                        .next()
+                        .find(|x| x.identifier == to_level_id)
                         .unwrap();
 
                     // Get the spawn point we will be teleporting to
@@ -562,20 +559,12 @@ pub fn change_level_system(
                         .unwrap()
                         .iter()
                         .find_map(|x| {
-                            x.entity_instances
-                                .iter()
-                                .filter(|x| {
-                                    x.__identifier == "SpawnPoint"
-                                        && x.field_instances
-                                            .iter()
-                                            .filter(|x| {
-                                                x.__identifier == "name"
-                                                    && x.__value == to_spawn_point
-                                            })
-                                            .next()
-                                            .is_some()
-                                })
-                                .next()
+                            x.entity_instances.iter().find(|x| {
+                                x.__identifier == "SpawnPoint"
+                                    && x.field_instances.iter().any(|x| {
+                                        x.__identifier == "name" && x.__value == to_spawn_point
+                                    })
+                            })
                         })
                         .unwrap();
 

@@ -52,7 +52,7 @@ async fn load_character<'a, 'b>(
         .join(&character.collision_shape);
 
     // Convert that to an asset path for the texture
-    let sprite_image_path = AssetPath::new(atlas_file_path.clone(), None);
+    let sprite_image_path = AssetPath::new(atlas_file_path, None);
     // Get the texture handle
     let sprite_image_handle: Handle<Image> = load_context.get_handle(sprite_image_path.clone());
     // Add it as a labled asset
@@ -65,7 +65,7 @@ async fn load_character<'a, 'b>(
     );
 
     // Convert that to an asset path for the texture
-    let collision_image_path = AssetPath::new(collision_file_path.clone(), None);
+    let collision_image_path = AssetPath::new(collision_file_path, None);
     // Get the texture handle
     let collision_image_handle: Handle<Image> =
         load_context.get_handle(collision_image_path.clone());
