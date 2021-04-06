@@ -113,8 +113,7 @@ fn spawn_players(
                 .project
                 .levels
                 .iter()
-                .filter(|x| x.identifier == **current_level)
-                .next()
+                .find(|x| x.identifier == **current_level)
                 .unwrap();
 
             let entities_layer = level
@@ -122,22 +121,18 @@ fn spawn_players(
                 .as_ref()
                 .unwrap()
                 .iter()
-                .filter(|&x| x.entity_instances.len() != 0)
-                .next()
+                .find(|&x| !x.entity_instances.is_empty())
                 .unwrap();
 
             let player_start = entities_layer
                 .entity_instances
                 .iter()
-                .filter(|x| {
+                .find(|x| {
                     x.__identifier == "SpawnPoint"
                         && x.field_instances
                             .iter()
-                            .filter(|x| x.__identifier == "name" && x.__value == "PlayerStart")
-                            .next()
-                            .is_some()
+                            .any(|x| x.__identifier == "name" && x.__value == "PlayerStart")
                 })
-                .next()
                 .unwrap();
 
             let character_handle: Handle<Character> =
