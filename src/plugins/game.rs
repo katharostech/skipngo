@@ -3,6 +3,9 @@ use bevy::prelude::*;
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
 
+use assets::*;
+mod assets;
+
 /// The game states
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GameState {
@@ -57,7 +60,7 @@ fn await_init(
         // Spawn the camera
         commands.spawn().insert_bundle(CameraBundle {
             camera: Camera {
-                size: CameraSize::FixedHeight(game_info.viewport_height),
+                size: game_info.camera_size.clone(),
                 custom_shader: if engine_config.enable_crt {
                     Some(CrtShader::default().get_shader())
                 } else {
@@ -164,61 +167,5 @@ fn spawn_players(
             // Go to the running state
             state.push(GameState::Running).unwrap();
         }
-    }
-}
-
-use asset::*;
-
-mod asset {
-    use bevy::{
-        asset::{AssetLoader, LoadedAsset},
-        reflect::TypeUuid,
-    };
-    use serde::Deserialize;
-
-    use super::*;
-
-    #[derive(Deserialize, TypeUuid, Clone)]
-    #[serde(deny_unknown_fields)]
-    #[serde(rename_all = "kebab-case")]
-    #[uuid = "c19826f5-e474-4ad0-a0fc-c24f144a1b79"]
-    pub struct GameInfo {
-        pub title: String,
-        pub map: String,
-        pub starting_level: String,
-        pub player_character: String,
-        pub viewport_height: u32,
-    }
-
-    #[derive(Default)]
-    pub struct GameInfoLoader;
-
-    impl AssetLoader for GameInfoLoader {
-        fn load<'a>(
-            &'a self,
-            bytes: &'a [u8],
-            load_context: &'a mut bevy::asset::LoadContext,
-        ) -> bevy::utils::BoxedFuture<'a, Result<(), anyhow::Error>> {
-            Box::pin(async move { Ok(load_game_info(bytes, load_context).await?) })
-        }
-
-        fn extensions(&self) -> &[&str] {
-            &["game.yml", "game.yaml"]
-        }
-    }
-
-    #[derive(thiserror::Error, Debug)]
-    enum CharacterLoaderError {
-        #[error("Could not parse game info: {0}")]
-        DeserializationError(#[from] serde_yaml::Error),
-    }
-
-    async fn load_game_info<'a, 'b>(
-        bytes: &'a [u8],
-        load_context: &'a mut bevy::asset::LoadContext<'b>,
-    ) -> Result<(), CharacterLoaderError> {
-        let game_info: GameInfo = serde_yaml::from_slice(bytes)?;
-        load_context.set_default_asset(LoadedAsset::new(game_info));
-        Ok(())
     }
 }
