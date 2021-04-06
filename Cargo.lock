@@ -370,7 +370,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro"
 version = "0.0.0"
-source = "git+https://github.com/katharostech/bevy_retro?branch=master#e3fc18620c37af98885d25f8b9e203e96dbea006"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#1642ef8b99e21e9cc1bbd2b23ff0bb9cef571a20"
 dependencies = [
  "anyhow",
  "bevy",
@@ -394,7 +394,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro_ldtk"
 version = "0.0.1"
-source = "git+https://github.com/katharostech/bevy_retro?branch=master#e3fc18620c37af98885d25f8b9e203e96dbea006"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#1642ef8b99e21e9cc1bbd2b23ff0bb9cef571a20"
 dependencies = [
  "anyhow",
  "bevy",
@@ -1237,7 +1237,7 @@ dependencies = [
 [[package]]
 name = "glow"
 version = "0.8.1"
-source = "git+https://github.com/katharostech/glow.git?branch=extra-webgl1-functions#cfa6dce731fc5f9905a30970910989b8f2f82391"
+source = "git+https://github.com/katharostech/glow.git?branch=extra-webgl1-functions#fd8ce09045b63cc33d51ff678a6fbc50ae618ca6"
 dependencies = [
  "js-sys",
  "slotmap",
@@ -1506,7 +1506,7 @@ dependencies = [
 [[package]]
 name = "luminance-glow"
 version = "0.0.0"
-source = "git+https://github.com/katharostech/luminance-glow?branch=master#c88518c0558bedcae35bf7639d70ba1c81c02cf1"
+source = "git+https://github.com/katharostech/luminance-glow?branch=master#a711ea489d8c102a0e282394ae546662169c4107"
 dependencies = [
  "cfg_aliases",
  "glow",
