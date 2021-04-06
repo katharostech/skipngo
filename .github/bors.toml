@@ -1,0 +1,17 @@
+status = [
+    "CI / Tests (macos-latest, stable) (pull_request)",
+    "CI / Tests (macos-latest, beta) (pull_request)",
+    "CI / Tests (macos-latest, nightly) (pull_request)",
+    "CI / Tests (windows-latest, stable) (pull_request)",
+    "CI / Tests (windows-latest, beta) (pull_request)",
+    "CI / Tests (windows-latest, nightly) (pull_request)",
+    "CI / Tests (ubuntu-latest, stable) (pull_request)",
+    "CI / Tests (ubuntu-latest, beta) (pull_request)",
+    "CI / Tests (ubuntu-latest, nightly) (pull_request)"
+]
+
+pr_status = [
+    "license/cla"
+]
+
+use_squash_merge = true

@@ -1237,7 +1237,7 @@ dependencies = [
 [[package]]
 name = "glow"
 version = "0.8.1"
-source = "git+https://github.com/katharostech/glow.git?branch=extra-webgl1-functions#fd8ce09045b63cc33d51ff678a6fbc50ae618ca6"
+source = "git+https://github.com/GrovesNL/glow.git?branch=main#efac9dd239bd1b818e99180ed7c2652223ca5d5d"
 dependencies = [
  "js-sys",
  "slotmap",
@@ -1506,7 +1506,7 @@ dependencies = [
 [[package]]
 name = "luminance-glow"
 version = "0.0.0"
-source = "git+https://github.com/katharostech/luminance-glow?branch=master#a711ea489d8c102a0e282394ae546662169c4107"
+source = "git+https://github.com/katharostech/luminance-glow?branch=master#ca5a0b6258d0c2413e7b5ff966ee1034c99a31f0"
 dependencies = [
  "cfg_aliases",
  "glow",
