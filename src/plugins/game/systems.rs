@@ -1,6 +1,5 @@
 use bevy::{core::FixedTimestep, ecs::schedule::ShouldRun, prelude::*, utils::HashSet};
 use bevy_retro::*;
-use bevy_retro_ldtk::*;
 
 use super::*;
 

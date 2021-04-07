@@ -8,7 +8,6 @@ use bevy::{
     prelude::*,
 };
 use bevy_retro::*;
-use bevy_retro_ldtk::*;
 
 #[cfg(not(wasm))]
 use structopt::StructOpt;

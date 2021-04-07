@@ -17,8 +17,7 @@ categories = [
 
 [dependencies]
 bevy = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
-bevy_retro = { git = "https://github.com/katharostech/bevy_retro", branch = "master" }
-bevy_retro_ldtk = { git = "https://github.com/katharostech/bevy_retro", branch = "master" }
+bevy_retro = { git = "https://github.com/katharostech/bevy_retro", branch = "master", features = ["ldtk"] }
 serde_yaml = "0.8.17"
 serde = "1.0.124"
 thiserror = "1.0.24"
