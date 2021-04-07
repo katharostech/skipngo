@@ -1,9 +1,21 @@
+use serde::Deserialize;
+
 use bevy::{
-    asset::{AssetLoader, LoadedAsset},
+    asset::{AssetLoader, AssetPath, LoadedAsset},
+    prelude::*,
     reflect::TypeUuid,
 };
-use bevy_retro::CameraSize;
-use serde::Deserialize;
+use bevy_retro::*;
+
+use super::*;
+
+/// Add all assets and their loaders to the Bevy app
+pub fn add_assets(app: &mut AppBuilder) {
+    app.add_asset::<GameInfo>()
+        .add_asset_loader(GameInfoLoader::default())
+        .add_asset::<Character>()
+        .add_asset_loader(CharacterLoader::default());
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum AssetLoaderError {
@@ -11,6 +23,7 @@ pub enum AssetLoaderError {
     DeserializationError(#[from] serde_yaml::Error),
 }
 
+/// The core info about the game provided by the .game.yaml file
 #[derive(Deserialize, TypeUuid, Clone)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
@@ -29,6 +42,7 @@ pub struct GameInfo {
     pub camera_size: CameraSize,
 }
 
+/// A serializable version of the bevy_retro [`CameraSize`]
 #[derive(Deserialize)]
 #[serde(remote = "CameraSize")]
 #[serde(rename_all = "kebab-case")]
@@ -37,6 +51,10 @@ pub enum CameraSizeDef {
     FixedWidth(u32),
     LetterBoxed { width: u32, height: u32 },
 }
+
+//
+// Game info loader
+//
 
 #[derive(Default)]
 pub struct GameInfoLoader;
@@ -61,5 +79,84 @@ async fn load_game_info<'a, 'b>(
 ) -> Result<(), AssetLoaderError> {
     let game_info: GameInfo = serde_yaml::from_slice(bytes)?;
     load_context.set_default_asset(LoadedAsset::new(game_info));
+    Ok(())
+}
+
+//
+// Character loader
+//
+
+#[derive(Default)]
+pub struct CharacterLoader;
+
+impl AssetLoader for CharacterLoader {
+    fn load<'a>(
+        &'a self,
+        bytes: &'a [u8],
+        load_context: &'a mut bevy::asset::LoadContext,
+    ) -> bevy::utils::BoxedFuture<'a, Result<(), anyhow::Error>> {
+        Box::pin(async move { Ok(load_character(bytes, load_context).await?) })
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["character.yml", "character.yaml"]
+    }
+}
+
+async fn load_character<'a, 'b>(
+    bytes: &'a [u8],
+    load_context: &'a mut bevy::asset::LoadContext<'b>,
+) -> Result<(), AssetLoaderError> {
+    // Load the character
+    let character: CharacterYmlData = serde_yaml::from_slice(bytes)?;
+
+    // Get the path to the tileset image asset
+    let atlas_file_path = load_context
+        .path()
+        .parent()
+        .unwrap()
+        .join(&character.sprite_sheet.path);
+
+    // Get the path to the tileset image asset
+    let collision_file_path = load_context
+        .path()
+        .parent()
+        .unwrap()
+        .join(&character.collision_shape);
+
+    // Convert that to an asset path for the texture
+    let sprite_image_path = AssetPath::new(atlas_file_path, None);
+    // Get the texture handle
+    let sprite_image_handle: Handle<Image> = load_context.get_handle(sprite_image_path.clone());
+    // Add it as a labled asset
+    let sprite_sheet_handle = load_context.set_labeled_asset(
+        "SpriteSheet",
+        LoadedAsset::new(SpriteSheet {
+            grid_size: UVec2::splat(character.sprite_sheet.grid_size.0),
+            tile_index: 0,
+        }),
+    );
+
+    // Convert that to an asset path for the texture
+    let collision_image_path = AssetPath::new(collision_file_path, None);
+    // Get the texture handle
+    let collision_image_handle: Handle<Image> =
+        load_context.get_handle(collision_image_path.clone());
+
+    // Set the character asset
+    load_context.set_default_asset(
+        LoadedAsset::new(Character {
+            name: character.name,
+            sprite_sheet_info: character.sprite_sheet,
+            collision_shape: collision_image_handle,
+            actions: character.actions,
+            walk_speed: character.walk_speed,
+            sprite_image: sprite_image_handle,
+            sprite_sheet: sprite_sheet_handle,
+        })
+        .with_dependency(collision_image_path)
+        .with_dependency(sprite_image_path),
+    );
+
     Ok(())
 }
