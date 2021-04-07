@@ -1,25 +1,218 @@
-#![allow(clippy::type_complexity)]
-#![allow(clippy::too_many_arguments)]
-
-use bevy::{prelude::*, utils::HashSet};
+use bevy::{core::FixedTimestep, ecs::schedule::ShouldRun, prelude::*, utils::HashSet};
 use bevy_retro::*;
 use bevy_retro_ldtk::*;
 
-use crate::plugins::game::CurrentLevel;
-
 use super::*;
 
-pub struct CharacterLoaded;
-
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-pub enum ControlEvent {
-    MoveUp,
-    MoveDown,
-    MoveLeft,
-    MoveRight,
+/// The game states
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum GameState {
+    /// The game is loading initial game data and spawning the initial items
+    LoadingGameInfo,
+    /// The game is loading the map and spawning the player
+    LoadingMap,
+    /// The game is running!
+    Running,
 }
 
-pub fn touch_control_input_system(
+// System labels
+#[derive(Clone, Debug, PartialEq, Eq, Hash, SystemLabel)]
+pub enum GameStage {
+    PreUpdate,
+    Update,
+    PostUpdate,
+}
+
+pub fn add_systems(app: &mut AppBuilder) {
+    debug!("Configuring game systems");
+    app
+        // // Set the inital game state
+        .add_state(GameState::LoadingGameInfo)
+        // Game init
+        .add_system_set(
+            SystemSet::on_update(GameState::LoadingGameInfo).with_system(await_init.system()),
+        )
+        // Player spawn
+        .add_system_set(
+            SystemSet::on_update(GameState::LoadingMap).with_system(spawn_player.system()),
+        )
+        // Add pre-update systems
+        .add_system_set(
+            SystemSet::on_update(GameState::Running)
+                .label(GameStage::PreUpdate)
+                .with_system(touch_control_input.system())
+                .with_system(keyboard_control_input.system())
+                .with_system(finish_spawning_character.system()),
+        )
+        // Add update systems
+        .add_system_set(
+            SystemSet::new()
+                .after(GameStage::PreUpdate)
+                .label(GameStage::Update)
+                .with_run_criteria(
+                    FixedTimestep::step(0.012).chain(
+                        // Workaround: https://github.com/bevyengine/bevy/issues/1839
+                        (|In(input): In<ShouldRun>, state: Res<State<GameState>>| {
+                            if state.current() == &GameState::Running {
+                                input
+                            } else {
+                                ShouldRun::No
+                            }
+                        })
+                        .system(),
+                    ),
+                ) // Run with fixed timestep
+                .with_system(control_character.system())
+                .with_system(animate_sprites.system())
+                .with_system(change_level.system()),
+        )
+        // Add post-update sytems
+        .add_system_set(
+            SystemSet::on_update(GameState::Running)
+                .after(GameStage::Update)
+                .label(GameStage::PostUpdate)
+                .with_system(camera_follow_system.system()),
+        );
+}
+
+//
+// Game Loading and initialization systems
+//
+
+/// Wait for the game info to load and spawn the map
+pub fn await_init(
+    mut commands: Commands,
+    game_info_assets: Res<Assets<GameInfo>>,
+    asset_server: Res<AssetServer>,
+    mut state: ResMut<State<GameState>>,
+    engine_config: Res<EngineConfig>,
+    #[cfg(not(wasm))] mut windows: ResMut<Windows>,
+) {
+    debug!("Awaiting game info load...");
+    let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
+
+    // Spawn the map once the game info loads
+    if let Some(game_info) = game_info_assets.get(game_info) {
+        debug!("Game info loaded, spawning camera and map");
+
+        // Spawn the camera
+        commands.spawn().insert_bundle(CameraBundle {
+            camera: Camera {
+                size: game_info.camera_size.clone(),
+                custom_shader: if engine_config.enable_crt {
+                    Some(CrtShader::default().get_shader())
+                } else {
+                    None
+                },
+                pixel_aspect_ratio: engine_config.pixel_aspect_ratio,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        // Update the window title
+        #[cfg(not(wasm))]
+        windows
+            .get_primary_mut()
+            .unwrap()
+            .set_title(game_info.title.clone());
+        #[cfg(wasm)]
+        web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .set_title(&game_info.title);
+
+        // Spawn the map
+        commands.spawn().insert_bundle(LdtkMapBundle {
+            map: asset_server.load(game_info.map.as_str()),
+            ..Default::default()
+        });
+
+        // Add the game info as a resource
+        commands.insert_resource(game_info.clone());
+        // Add the current level resource
+        commands.insert_resource(CurrentLevel(game_info.starting_level.clone()));
+
+        // Transition to map loading state
+        state.push(GameState::LoadingMap).unwrap();
+    }
+}
+
+pub fn spawn_player(
+    mut commands: Commands,
+    map_query: Query<&Handle<LdtkMap>>,
+    map_assets: Res<Assets<LdtkMap>>,
+    mut state: ResMut<State<GameState>>,
+    asset_server: Res<AssetServer>,
+    game_info: Res<GameInfo>,
+    current_level: Res<CurrentLevel>,
+) {
+    for map_handle in map_query.iter() {
+        if let Some(map) = map_assets.get(map_handle) {
+            let level = &map
+                .project
+                .levels
+                .iter()
+                .find(|x| x.identifier == **current_level)
+                .unwrap();
+
+            let entities_layer = level
+                .layer_instances
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find(|&x| !x.entity_instances.is_empty())
+                .unwrap();
+
+            let player_start = entities_layer
+                .entity_instances
+                .iter()
+                .find(|x| {
+                    x.__identifier == "SpawnPoint"
+                        && x.field_instances
+                            .iter()
+                            .any(|x| x.__identifier == "name" && x.__value == "PlayerStart")
+                })
+                .unwrap();
+
+            let character_handle: Handle<Character> =
+                asset_server.load(game_info.player_character.as_str());
+
+            let character_image_handle =
+                asset_server.load(format!("{}#atlas", game_info.player_character).as_str());
+            let character_spritesheet_handle =
+                asset_server.load(format!("{}#spritesheet", game_info.player_character).as_str());
+
+            // Layers are 2 units away from each-other, so put the player at the top
+            let player_z = level.layer_instances.as_ref().unwrap().len() as i32 * 2;
+
+            commands.spawn().insert_bundle(CharacterBundle {
+                character: character_handle,
+                sprite_bundle: SpriteBundle {
+                    image: character_image_handle,
+                    position: Position::new(
+                        player_start.px[0] + level.world_x,
+                        player_start.px[1] + level.world_y,
+                        player_z,
+                    ),
+                    ..Default::default()
+                },
+                sprite_sheet: character_spritesheet_handle,
+                ..Default::default()
+            });
+
+            // Go to the running state
+            state.push(GameState::Running).unwrap();
+        }
+    }
+}
+
+//
+// Game play systems
+//
+
+pub fn touch_control_input(
     mut tracked_touch: Local<Option<u64>>,
     mut touch_events: EventReader<TouchInput>,
     mut control_events: EventWriter<ControlEvent>,
@@ -65,7 +258,7 @@ pub fn touch_control_input_system(
     }
 }
 
-pub fn keyboard_control_input_system(
+pub fn keyboard_control_input(
     mut control_events: EventWriter<ControlEvent>,
     keyboard_input: Res<Input<KeyCode>>,
 ) {
@@ -85,6 +278,9 @@ pub fn keyboard_control_input_system(
         control_events.send(ControlEvent::MoveDown);
     }
 }
+
+/// Marker component for loaded characters
+pub struct CharacterLoaded;
 
 /// Add the sprite image and sprite sheet handles to the spawned character
 pub fn finish_spawning_character(
@@ -291,7 +487,7 @@ pub fn control_character(
 }
 
 /// Play the character's sprite animation
-pub fn animate_sprite_system(
+pub fn animate_sprites(
     characters: Res<Assets<Character>>,
     mut query: Query<(
         &Handle<SpriteSheet>,
@@ -434,7 +630,7 @@ pub fn camera_follow_system(
     }
 }
 
-pub fn change_level_system(
+pub fn change_level(
     mut cameras: Query<&mut Camera>,
     mut characters: Query<(Entity, &Handle<Character>, &Sprite)>,
     mut world_positions: WorldPositionsQuery,
@@ -443,7 +639,7 @@ pub fn change_level_system(
     mut scene_graph: ResMut<SceneGraph>,
     image_assets: Res<Assets<Image>>,
     character_assets: Res<Assets<Character>>,
-    current_level: Option<ResMut<CurrentLevel>>,
+    mut current_level: ResMut<CurrentLevel>,
 ) {
     // Synchronize world positions before checking for collisions
     world_positions.sync_world_positions(&mut scene_graph);
@@ -461,11 +657,6 @@ pub fn change_level_system(
     };
 
     // Get the current map level
-    let mut current_level = if let Some(level) = current_level {
-        level
-    } else {
-        return;
-    };
     let level = map
         .project
         .levels

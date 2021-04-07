@@ -1,59 +1,11 @@
-use bevy::{core::FixedTimestep, prelude::*, reflect::TypeUuid};
-use bevy_retro::*;
 use serde::Deserialize;
 
-pub mod loader;
-pub mod systems;
+use bevy::{prelude::*, reflect::TypeUuid};
+use bevy_retro::*;
 
-use loader::CharacterLoader;
-
-use self::systems::ControlEvent;
-
-pub struct CharacterPlugin;
-
-#[derive(Eq, PartialEq, StageLabel, Clone, Hash, Debug)]
-pub enum CharacterStages {
-    Game,
-    CameraFollow,
-}
-
-impl Plugin for CharacterPlugin {
-    fn build(&self, app: &mut bevy::prelude::AppBuilder) {
-        app.add_asset::<Character>()
-            .init_asset_loader::<CharacterLoader>()
-            .add_event::<ControlEvent>()
-            .add_stage(
-                CharacterStages::Game,
-                SystemStage::parallel().with_run_criteria(FixedTimestep::step(0.012)),
-            )
-            .add_stage_after(
-                CharacterStages::Game,
-                CharacterStages::CameraFollow,
-                SystemStage::parallel(),
-            )
-            .add_system_to_stage(
-                CharacterStages::CameraFollow,
-                systems::camera_follow_system.system(),
-            )
-            .add_system_to_stage(
-                CharacterStages::Game,
-                systems::finish_spawning_character.system(),
-            )
-            .add_system_to_stage(
-                CharacterStages::Game,
-                systems::touch_control_input_system.system().chain(
-                    systems::keyboard_control_input_system
-                        .system()
-                        .chain(systems::control_character.system()),
-                ),
-            )
-            .add_system_to_stage(
-                CharacterStages::Game,
-                systems::animate_sprite_system.system(),
-            )
-            .add_system_to_stage(CharacterStages::Game, systems::change_level_system.system());
-    }
-}
+//
+// Character components
+//
 
 #[derive(TypeUuid)]
 #[uuid = "9fa5febb-1a7b-4864-9534-2d5df8df82f4"]
