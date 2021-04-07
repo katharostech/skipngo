@@ -1,3 +1,7 @@
+// Bevy systems often have complex types and lots of arguments
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
+
 use bevy::{
     asset::AssetServerSettings,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
