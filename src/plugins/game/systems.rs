@@ -1,5 +1,5 @@
 use bevy::{core::FixedTimestep, ecs::schedule::ShouldRun, prelude::*, utils::HashSet};
-use bevy_retro::*;
+use bevy_retro::{kira::parameter::tween::Tween, *};
 
 use super::*;
 
@@ -33,7 +33,8 @@ pub fn add_systems(app: &mut AppBuilder) {
         )
         // Player spawn
         .add_system_set(
-            SystemSet::on_update(GameState::LoadingMap).with_system(spawn_player.system()),
+            SystemSet::on_update(GameState::LoadingMap)
+                .with_system(spawn_player_and_setup_level.system()),
         )
         // Add pre-update systems
         .add_system_set(
@@ -49,7 +50,7 @@ pub fn add_systems(app: &mut AppBuilder) {
                 .after(GameStage::PreUpdate)
                 .label(GameStage::Update)
                 .with_run_criteria(
-                    FixedTimestep::step(0.012).chain(
+                    FixedTimestep::step(0.02).chain(
                         // Workaround: https://github.com/bevyengine/bevy/issues/1839
                         (|In(input): In<ShouldRun>, state: Res<State<GameState>>| {
                             if state.current() == &GameState::Running {
@@ -138,7 +139,7 @@ pub fn await_init(
     }
 }
 
-pub fn spawn_player(
+pub fn spawn_player_and_setup_level(
     mut commands: Commands,
     map_query: Query<&Handle<LdtkMap>>,
     map_assets: Res<Assets<LdtkMap>>,
@@ -146,9 +147,11 @@ pub fn spawn_player(
     asset_server: Res<AssetServer>,
     game_info: Res<GameInfo>,
     current_level: Res<CurrentLevel>,
+    mut sound_controller: SoundController,
 ) {
     for map_handle in map_query.iter() {
         if let Some(map) = map_assets.get(map_handle) {
+            debug!("Map loaded: spawning player");
             let level = &map
                 .project
                 .levels
@@ -201,7 +204,30 @@ pub fn spawn_player(
                 ..Default::default()
             });
 
+            let background_music_field = level
+                .field_instances
+                .iter()
+                .find(|x| x.__identifier == "music")
+                .unwrap();
+
+            if let Some(music) = background_music_field.__value.as_str() {
+                if music != "none" {
+                    debug!("Starting level music");
+                    let sound_data = asset_server.load(music);
+                    let sound = sound_controller.create_sound(&sound_data);
+
+                    // Play music on loop
+                    sound_controller.play_sound_with_settings(
+                        sound,
+                        PlaySoundSettings::new().loop_start(LoopStart::Custom(0.0)),
+                    );
+
+                    commands.insert_resource(CurrentLevelMusic { sound_data, sound });
+                }
+            }
+
             // Go to the running state
+            debug!("Going into running state");
             state.push(GameState::Running).unwrap();
         }
     }
@@ -630,6 +656,7 @@ pub fn camera_follow_system(
 }
 
 pub fn change_level(
+    mut commands: Commands,
     mut cameras: Query<&mut Camera>,
     mut characters: Query<(Entity, &Handle<Character>, &Sprite)>,
     mut world_positions: WorldPositionsQuery,
@@ -639,6 +666,9 @@ pub fn change_level(
     image_assets: Res<Assets<Image>>,
     character_assets: Res<Assets<Character>>,
     mut current_level: ResMut<CurrentLevel>,
+    mut current_level_music: Option<ResMut<CurrentLevelMusic>>,
+    mut sound_controller: SoundController,
+    asset_server: Res<AssetServer>,
 ) {
     // Synchronize world positions before checking for collisions
     world_positions.sync_world_positions(&mut scene_graph);
@@ -760,6 +790,86 @@ pub fn change_level(
 
                     // Set the current level to the new level
                     *current_level = CurrentLevel(to_level_id.into());
+
+                    // Play the level music
+                    let music_field = to_level
+                        .field_instances
+                        .iter()
+                        .find(|x| x.__identifier == "music")
+                        .unwrap();
+
+                    // Create helper to stop the music that is already playing
+                    let stop_music = |controller: &mut SoundController, sound| {
+                        controller.stop_sound_with_settings(
+                            sound,
+                            StopSoundSettings::new().fade_tween(Some(Tween {
+                                duration: 1.0,
+                                easing: Default::default(),
+                                ease_direction: Default::default(),
+                            })),
+                        );
+                    };
+
+                    // If there is a music setting for this level
+                    if let Some(new_music) = music_field.__value.as_str() {
+                        // If the new music is the special value "none"
+                        if new_music == "none" {
+                            // Stop playing any music that might already be playing
+                            if let Some(current_music) = current_level_music.as_ref() {
+                                stop_music(&mut sound_controller, current_music.sound);
+                            }
+
+                            // And unset the current music
+                            commands.remove_resource::<CurrentLevelMusic>();
+
+                        // If there is new music we should play
+                        } else {
+                            // Get the new music file data
+                            let new_sound_data = asset_server.load(new_music);
+
+                            // Create helper to play the new music
+                            let play_music = |controller: &mut SoundController, new_sound_data| {
+                                let sound = controller.create_sound(&new_sound_data);
+
+                                controller.play_sound_with_settings(
+                                    sound,
+                                    PlaySoundSettings::new()
+                                        .fade_in_tween(Tween {
+                                            duration: 1.0,
+                                            easing: Default::default(),
+                                            ease_direction: Default::default(),
+                                        })
+                                        .loop_start(LoopStart::Custom(0.0)),
+                                );
+
+                                // Return the current level music data
+                                CurrentLevelMusic {
+                                    sound_data: new_sound_data.clone(),
+                                    sound,
+                                }
+                            };
+
+                            // If there is music currently playing
+                            if let Some(current_music) = current_level_music.as_mut() {
+                                // If the music currently playing is not already the music we want to play
+                                if current_music.sound_data != new_sound_data {
+                                    // Stop the old music
+                                    stop_music(&mut sound_controller, current_music.sound);
+
+                                    // And play new new music
+                                    **current_music =
+                                        play_music(&mut sound_controller, new_sound_data);
+                                }
+
+                            // If there is no music already playing, just play the new music
+                            } else {
+                                commands.insert_resource(play_music(
+                                    &mut sound_controller,
+                                    new_sound_data,
+                                ));
+                            }
+                        }
+                    }
 
                     // Set the camera background to the level background color
                     for mut camera in cameras.iter_mut() {

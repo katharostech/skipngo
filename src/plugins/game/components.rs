@@ -4,6 +4,21 @@ use bevy::{prelude::*, reflect::TypeUuid};
 use bevy_retro::*;
 
 //
+// Game and level components
+//
+
+/// The current map level the player is in
+#[derive(Clone)]
+pub struct CurrentLevel(pub String);
+impl_deref!(CurrentLevel, String);
+
+#[derive(Clone)]
+pub struct CurrentLevelMusic {
+    pub sound_data: Handle<SoundData>,
+    pub sound: Sound,
+}
+
+//
 // Character components
 //
 
