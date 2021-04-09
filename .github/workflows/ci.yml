@@ -43,7 +43,6 @@ jobs:
 
       - name: rustfmt & clippy
         run: |
-          cargo update
           rustup component add clippy rustfmt
           cargo clippy --workspace
           cargo fmt --all -- --check
