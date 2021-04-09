@@ -83,13 +83,13 @@ pub struct CharacterAnimation {
 #[derive(Clone)]
 pub struct CharacterCurrentTilesetIndex(pub u32);
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CharacterStateAction {
     Walk,
     Idle,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CharacterStateDirection {
     Up,
     Down,

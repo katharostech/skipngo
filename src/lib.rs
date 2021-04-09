@@ -5,6 +5,7 @@
 use bevy::{
     asset::AssetServerSettings,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    ecs::schedule::ReportExecutionOrderAmbiguities,
     prelude::*,
 };
 use bevy_retro::*;
@@ -36,6 +37,7 @@ pub fn run() {
         .insert_resource(AssetServerSettings {
             asset_folder: engine_config.asset_path.clone(),
         })
+        .insert_resource(ReportExecutionOrderAmbiguities)
         // Add engine configuration
         .insert_resource(engine_config.clone())
         // Add the logging config

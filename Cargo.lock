@@ -407,7 +407,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro"
 version = "0.0.0"
-source = "git+https://github.com/katharostech/bevy_retro?branch=master#00a506c0ba03a26005f0f291a56583753339618a"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#50f16210ca55445aacdd9e4e9ef59682a4342035"
 dependencies = [
  "bevy",
  "bevy_retro_audio",
@@ -418,11 +418,10 @@ dependencies = [
 [[package]]
 name = "bevy_retro_audio"
 version = "0.0.0"
-source = "git+https://github.com/katharostech/bevy_retro?branch=master#00a506c0ba03a26005f0f291a56583753339618a"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#50f16210ca55445aacdd9e4e9ef59682a4342035"
 dependencies = [
  "anyhow",
  "bevy",
- "bevy_retro_core",
  "flume",
  "kira",
  "thiserror",
@@ -432,7 +431,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro_core"
 version = "0.0.0"
-source = "git+https://github.com/katharostech/bevy_retro?branch=master#00a506c0ba03a26005f0f291a56583753339618a"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#50f16210ca55445aacdd9e4e9ef59682a4342035"
 dependencies = [
  "anyhow",
  "bevy",
@@ -457,7 +456,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro_ldtk"
 version = "0.0.1"
-source = "git+https://github.com/katharostech/bevy_retro?branch=master#00a506c0ba03a26005f0f291a56583753339618a"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#50f16210ca55445aacdd9e4e9ef59682a4342035"
 dependencies = [
  "anyhow",
  "bevy",

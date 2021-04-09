@@ -7,71 +7,128 @@ use super::*;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GameState {
     /// The game is loading initial game data and spawning the initial items
-    LoadingGameInfo,
+    Init,
     /// The game is loading the map and spawning the player
     LoadingMap,
     /// The game is running!
     Running,
 }
 
-// System labels
-#[derive(Clone, Debug, PartialEq, Eq, Hash, SystemLabel)]
-pub enum GameStage {
-    PreUpdate,
+#[derive(Clone, Debug, PartialEq, Eq, Hash, StageLabel)]
+enum GameStage {
+    Init,
+    Load,
     Update,
-    PostUpdate,
 }
+
+#[derive(Clone, Hash, PartialEq, Eq, Debug, SystemLabel, AmbiguitySetLabel)]
+struct InputLabel;
+#[derive(Clone, Hash, PartialEq, Eq, Debug, SystemLabel, AmbiguitySetLabel)]
+struct CharacterControlLabel;
+#[derive(Clone, Hash, PartialEq, Eq, Debug, SystemLabel, AmbiguitySetLabel)]
+struct CameraFollowLabel;
+#[derive(Clone, Hash, PartialEq, Eq, Debug, SystemLabel, AmbiguitySetLabel)]
+struct AnimateSpritesLabel;
 
 pub fn add_systems(app: &mut AppBuilder) {
     debug!("Configuring game systems");
     app
-        // // Set the inital game state
-        .add_state(GameState::LoadingGameInfo)
-        // Game init
-        .add_system_set(
-            SystemSet::on_update(GameState::LoadingGameInfo).with_system(await_init.system()),
-        )
-        // Player spawn
-        .add_system_set(
-            SystemSet::on_update(GameState::LoadingMap)
-                .with_system(spawn_player_and_setup_level.system()),
-        )
-        // Add pre-update systems
-        .add_system_set(
-            SystemSet::on_update(GameState::Running)
-                .label(GameStage::PreUpdate)
-                .with_system(touch_control_input.system())
-                .with_system(keyboard_control_input.system())
-                .with_system(finish_spawning_character.system()),
-        )
-        // Add update systems
-        .add_system_set(
-            SystemSet::new()
-                .after(GameStage::PreUpdate)
-                .label(GameStage::Update)
-                .with_run_criteria(
-                    FixedTimestep::step(0.02).chain(
-                        // Workaround: https://github.com/bevyengine/bevy/issues/1839
-                        (|In(input): In<ShouldRun>, state: Res<State<GameState>>| {
-                            if state.current() == &GameState::Running {
-                                input
+        // Set the inital game state
+        .add_state(GameState::Init)
+        .add_stage_after(
+            CoreStage::Update,
+            GameStage::Init,
+            SystemStage::parallel().with_system_set(
+                SystemSet::new()
+                    .with_run_criteria(
+                        (|state: Res<State<GameState>>| {
+                            if state.current() == &GameState::Init {
+                                ShouldRun::Yes
                             } else {
                                 ShouldRun::No
                             }
                         })
                         .system(),
-                    ),
-                ) // Run with fixed timestep
-                .with_system(control_character.system())
-                .with_system(animate_sprites.system())
-                .with_system(change_level.system()),
+                    )
+                    .with_system(await_init.system()),
+            ),
         )
-        // Add post-update sytems
-        .add_system_set(
-            SystemSet::on_update(GameState::Running)
-                .after(GameStage::Update)
-                .label(GameStage::PostUpdate)
-                .with_system(camera_follow_system.system()),
+        // Player spawn
+        .add_stage_after(
+            GameStage::Init,
+            GameStage::Load,
+            SystemStage::parallel().with_system_set(
+                SystemSet::new()
+                    .with_run_criteria(
+                        (|state: Res<State<GameState>>| {
+                            if state.current() == &GameState::LoadingMap {
+                                ShouldRun::Yes
+                            } else {
+                                ShouldRun::No
+                            }
+                        })
+                        .system(),
+                    )
+                    .with_system(spawn_player_and_setup_level.system()),
+            ),
+        )
+        // Add update systems
+        .add_stage_after(
+            GameStage::Load,
+            GameStage::Update,
+            SystemStage::parallel().with_system_set(
+                SystemSet::new()
+                    .with_run_criteria(
+                        FixedTimestep::step(0.012).chain(
+                            // Workaround: https://github.com/bevyengine/bevy/issues/1839
+                            (|In(input): In<ShouldRun>, state: Res<State<GameState>>| {
+                                if state.current() == &GameState::Running {
+                                    input
+                                } else {
+                                    ShouldRun::No
+                                }
+                            })
+                            .system(),
+                        ),
+                    ) // Run with fixed timestep
+                    .with_system(finish_spawning_character.system().before(InputLabel))
+                    .with_system(
+                        touch_control_input
+                            .system()
+                            .label(InputLabel)
+                            .in_ambiguity_set(InputLabel),
+                    )
+                    .with_system(
+                        keyboard_control_input
+                            .system()
+                            .label(InputLabel)
+                            .in_ambiguity_set(InputLabel),
+                    )
+                    .with_system(
+                        control_character
+                            .system()
+                            .label(CharacterControlLabel)
+                            .after(InputLabel),
+                    )
+                    .with_system(
+                        animate_sprites
+                            .system()
+                            .label(AnimateSpritesLabel)
+                            .after(CharacterControlLabel),
+                    )
+                    .with_system(
+                        camera_follow_system
+                            .system()
+                            .label(CameraFollowLabel)
+                            .after(CharacterControlLabel),
+                    )
+                    .with_system(
+                        change_level
+                            .system()
+                            .after(CameraFollowLabel)
+                            .after(AnimateSpritesLabel),
+                    ),
+            ),
         );
 }
 
@@ -91,9 +148,9 @@ pub fn await_init(
     debug!("Awaiting game info load...");
     let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
 
-    // Spawn the map once the game info loads
+    // Spawn the map and camera once the game info loads
     if let Some(game_info) = game_info_assets.get(game_info) {
-        debug!("Game info loaded, spawning camera and map");
+        debug!("Game info loaded: spawning camera and map");
 
         // Spawn the camera
         commands.spawn().insert_bundle(CameraBundle {
