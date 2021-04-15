@@ -920,7 +920,7 @@ pub fn change_level(
 
                                 // Return the current level music data
                                 CurrentLevelMusic {
-                                    sound_data: new_sound_data.clone(),
+                                    sound_data: new_sound_data,
                                     sound,
                                 }
                             };
