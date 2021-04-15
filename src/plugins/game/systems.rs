@@ -146,7 +146,7 @@ pub fn await_init(
     #[cfg(not(wasm))] mut windows: ResMut<Windows>,
 ) {
     debug!("Awaiting game info load...");
-    let game_info: Handle<GameInfo> = asset_server.load("default.game.yaml");
+    let game_info: Handle<GameInfo> = asset_server.load_cached("default.game.yaml");
 
     // Spawn the map and camera once the game info loads
     if let Some(game_info) = game_info_assets.get(game_info) {
@@ -182,7 +182,7 @@ pub fn await_init(
 
         // Spawn the map
         commands.spawn().insert_bundle(LdtkMapBundle {
-            map: asset_server.load(game_info.map.as_str()),
+            map: asset_server.load_cached(game_info.map.as_str()),
             ..Default::default()
         });
 
@@ -236,16 +236,17 @@ pub fn spawn_player_and_setup_level(
                 .unwrap();
 
             let character_handle: Handle<Character> =
-                asset_server.load(game_info.player_character.as_str());
+                asset_server.load_cached(game_info.player_character.as_str());
 
             let character_image_handle =
-                asset_server.load(format!("{}#atlas", game_info.player_character).as_str());
-            let character_spritesheet_handle =
-                asset_server.load(format!("{}#spritesheet", game_info.player_character).as_str());
+                asset_server.load_cached(format!("{}#atlas", game_info.player_character).as_str());
+            let character_spritesheet_handle = asset_server
+                .load_cached(format!("{}#spritesheet", game_info.player_character).as_str());
 
             // Layers are 2 units away from each-other, so put the player at the top
             let player_z = level.layer_instances.as_ref().unwrap().len() as i32 * 2;
 
+            // Spawn the player
             commands.spawn().insert_bundle(CharacterBundle {
                 character: character_handle,
                 sprite_bundle: SpriteBundle {
@@ -261,16 +262,18 @@ pub fn spawn_player_and_setup_level(
                 ..Default::default()
             });
 
+            // Get the level background music
             let background_music_field = level
                 .field_instances
                 .iter()
                 .find(|x| x.__identifier == "music")
                 .unwrap();
 
+            // Play the music if it is set
             if let Some(music) = background_music_field.__value.as_str() {
                 if music != "none" {
                     debug!("Starting level music");
-                    let sound_data = asset_server.load(music);
+                    let sound_data = asset_server.load_cached(music);
                     let sound = sound_controller.create_sound(&sound_data);
 
                     // Play music on loop
@@ -280,6 +283,22 @@ pub fn spawn_player_and_setup_level(
                     );
 
                     commands.insert_resource(CurrentLevelMusic { sound_data, sound });
+                }
+            }
+
+            // Pre-load all other background music for the map
+            for level in &map.project.levels {
+                let background_music_field = level
+                    .field_instances
+                    .iter()
+                    .find(|x| x.__identifier == "music")
+                    .unwrap();
+
+                if let Some(music) = background_music_field.__value.as_str() {
+                    if music != "none" {
+                        // Cache the music data
+                        asset_server.load_cached::<SoundData, _>(music);
+                    }
                 }
             }
 
@@ -882,7 +901,7 @@ pub fn change_level(
                         // If there is new music we should play
                         } else {
                             // Get the new music file data
-                            let new_sound_data = asset_server.load(new_music);
+                            let new_sound_data = asset_server.load_cached(new_music);
 
                             // Create helper to play the new music
                             let play_music = |controller: &mut SoundController, new_sound_data| {
