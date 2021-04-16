@@ -1,4 +1,9 @@
-use bevy::{core::FixedTimestep, ecs::schedule::ShouldRun, prelude::*, utils::HashSet};
+use bevy::{
+    core::FixedTimestep,
+    ecs::{component::ComponentDescriptor, schedule::ShouldRun},
+    prelude::*,
+    utils::HashSet,
+};
 use bevy_retro::{kira::parameter::tween::Tween, *};
 
 use super::*;
@@ -33,6 +38,10 @@ struct AnimateSpritesLabel;
 pub fn add_systems(app: &mut AppBuilder) {
     debug!("Configuring game systems");
     app
+        // Use sparse storage for marker component
+        .register_component(ComponentDescriptor::new::<CharacterLoaded>(
+            bevy::ecs::component::StorageType::SparseSet,
+        ))
         // Set the inital game state
         .add_state(GameState::Init)
         .add_stage_after(
