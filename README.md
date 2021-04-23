@@ -15,8 +15,8 @@ The game engine is powered by the Rust programming language and the [Bevy] game 
 
 ## License
 
-Bevy Retro LDtk is licensed under the [Katharos License][k_license] which places certain
+Skip'n Go is licensed under the [Katharos License][k_license] which places certain
 restrictions on what you are allowed to use it for. Please read and understand the terms before
-using Bevy LDtk for your project.
+using Skip'n Go for your project.
 
 [k_license]: https://github.com/katharostech/katharos-license
