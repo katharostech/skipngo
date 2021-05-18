@@ -4,7 +4,8 @@ use bevy::{
     prelude::*,
     utils::HashSet,
 };
-use bevy_retro::{kira::parameter::tween::Tween, *};
+use bevy_retro::prelude::*;
+use kira::parameter::tween::Tween;
 
 use super::*;
 

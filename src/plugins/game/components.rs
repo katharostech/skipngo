@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use bevy::{prelude::*, reflect::TypeUuid};
-use bevy_retro::*;
+use bevy_retro::prelude::*;
 
 //
 // Game and level components

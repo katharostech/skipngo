@@ -8,7 +8,7 @@ use bevy::{
     ecs::schedule::ReportExecutionOrderAmbiguities,
     prelude::*,
 };
-use bevy_retro::*;
+use bevy_retro::prelude::*;
 
 #[cfg(not(wasm))]
 use structopt::StructOpt;
@@ -44,8 +44,6 @@ pub fn run() {
         .insert_resource(log_config)
         // Install Bevy Retro
         .add_plugins(RetroPlugins)
-        // Install Bevy Retro LDtk
-        .add_plugin(LdtkPlugin)
         // Add our SkipnGo plugins
         .add_plugins(plugins::SkipnGoPlugins);
 

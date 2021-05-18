@@ -5,7 +5,7 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
 };
-use bevy_retro::*;
+use bevy_retro::prelude::*;
 
 use super::*;
 
