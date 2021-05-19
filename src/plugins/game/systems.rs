@@ -1116,10 +1116,27 @@ mod ui {
                                 state.push(GameState::LoadingGame).unwrap();
                             }
                         }
+                    } else if &msg.0 == "show_settings" {
+                        ctx.state
+                            .write(StartMenuState {
+                                show_settings: true,
+                            })
+                            .unwrap();
+                    } else if &msg.0 == "hide_settings" {
+                        ctx.state
+                            .write(StartMenuState {
+                                show_settings: false,
+                            })
+                            .unwrap();
                     }
                 }
             }
         })
+    }
+
+    #[derive(PropsData, Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+    struct StartMenuState {
+        show_settings: bool,
     }
 
     /// The UI tree used for the start menu
@@ -1131,6 +1148,8 @@ mod ui {
             ..
         } = ctx;
 
+        let StartMenuState { show_settings } = ctx.state.read_cloned_or_default();
+
         // Get the game info from the world
         let world: &mut World = process_context.get_mut().unwrap();
         let game_info = world.get_resource::<GameInfo>().unwrap();
@@ -1141,14 +1160,20 @@ mod ui {
             .with({
                 let mut theme = ThemeProps::default();
 
-                // theme.content_backgrounds.insert(
-                //     String::new(),
-                //     ThemedImageMaterial::Image(ImageBoxImage {
-                //         id: "ui/panel.png".to_owned(),
-                //         scaling: ImageBoxImageScaling::Frame((20.0, false).into()),
-                //         ..Default::default()
-                //     }),
-                // );
+                theme.content_backgrounds.insert(
+                    String::from("panel"),
+                    ThemedImageMaterial::Image(ImageBoxImage {
+                        id: game_info.ui_theme.panel.image.clone(),
+                        scaling: ImageBoxImageScaling::Frame(
+                            (
+                                game_info.ui_theme.panel.border_size as f32,
+                                game_info.ui_theme.panel.only_frame,
+                            )
+                                .into(),
+                        ),
+                        ..Default::default()
+                    }),
+                );
 
                 theme.content_backgrounds.insert(
                     String::from("button-up"),
@@ -1184,7 +1209,7 @@ mod ui {
                     String::new(),
                     ThemedTextMaterial {
                         font: TextBoxFont {
-                            name: "cozette.bdf".into(),
+                            name: game_info.ui_theme.default_font.clone(),
                             // Font's in Bevy Retro don't really have sizes so we can just set this to
                             // one
                             size: 1.0,
@@ -1194,7 +1219,8 @@ mod ui {
                 );
 
                 theme
-            });
+            })
+            .with(game_info.clone());
 
         let vertical_box_props = VerticalBoxProps {
             separation: 0.,
@@ -1221,7 +1247,7 @@ mod ui {
             ..Default::default()
         });
 
-        let start_button_rops = Props::new(FlexBoxItemLayout {
+        let start_button_props = Props::new(FlexBoxItemLayout {
             align: 0.5,
             grow: 0.0,
             margin: Rect {
@@ -1248,14 +1274,32 @@ mod ui {
         .with(GameButtonProps {
             text: "Settings".into(),
             notify_id: id.to_owned(),
-            message: "settings".into(),
+            message: "show_settings".into(),
         });
 
+        let content = if show_settings {
+            let props = Props::new(SettingsPanelProps {
+                cancel_notify_id: ctx.id.to_owned(),
+                cancel_notify_message: "hide_settings".into(),
+            });
+
+            widget! {
+                (#{"settings"} settings_panel: {props})
+            }
+        } else {
+            widget! {
+                // The main content
+                (nav_vertical_box: {vertical_box_props} [
+                    (image_box: {title_image_props})
+                    (game_button: {start_button_props})
+                    (game_button: {settings_button_props})
+                ])
+            }
+        };
+
         widget! {
-            (nav_vertical_box: {vertical_box_props} | {shared_props} [
-                (image_box: {title_image_props})
-                (game_button: {start_button_rops})
-                (game_button: {settings_button_props})
+            (content_box | {shared_props} [
+                {content}
             ])
         }
     }
@@ -1307,13 +1351,13 @@ mod ui {
             .with(NavItemActive)
             .with(ButtonNotifyProps(ctx.id.to_owned().into()));
 
-        let button_panel_props = ctx.props.clone().with(PaperProps {
+        let button_panel_props = Props::new(PaperProps {
             frame: None,
             variant: if clicked {
-                String::from("button-down")
-            } else {
                 // TODO: Somehow pre-load the button-up image so that it doesn't flash
                 // blank for a second the first time a button is clicked
+                String::from("button-down")
+            } else {
                 String::from("button-up")
             },
         });
@@ -1363,6 +1407,114 @@ mod ui {
                     ])
                 })
             })
+        }
+    }
+
+    #[derive(PropsData, Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+    struct SettingsPanelProps {
+        cancel_notify_id: WidgetId,
+        cancel_notify_message: String,
+    }
+
+    fn settings_panel(ctx: WidgetContext) -> WidgetNode {
+        let game_info: GameInfo = ctx.shared_props.read_cloned().unwrap();
+        let SettingsPanelProps {
+            cancel_notify_id,
+            cancel_notify_message,
+        } = ctx.props.read_cloned_or_default();
+
+        let panel_props = Props::new(ContentBoxItemLayout {
+            // TODO: Open RAUI bug, margin somehow applies to both the inside and outside of the panel
+            margin: Rect {
+                left: 13.,
+                right: 13.,
+                top: 7.,
+                bottom: 7.,
+            },
+            ..Default::default()
+        })
+        .with(PaperProps {
+            variant: "panel".into(),
+            frame: None,
+        });
+
+        let title_props = Props::new(TextBoxProps {
+            text: "Settings".into(),
+            font: TextBoxFont {
+                name: game_info.ui_theme.default_font.clone(),
+                size: 1.0,
+            },
+            horizontal_align: TextBoxHorizontalAlign::Center,
+            color: Color {
+                r: 0.,
+                g: 0.,
+                b: 0.,
+                a: 1.,
+            },
+            ..Default::default()
+        });
+
+        let cancel_button_props = Props::new(FlexBoxItemLayout {
+            align: 0.5,
+            grow: 0.0,
+            margin: Rect {
+                top: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .with(GameButtonProps {
+            text: "Cancel".into(),
+            notify_id: cancel_notify_id,
+            message: cancel_notify_message,
+        });
+
+        let save_button_props = Props::new(FlexBoxItemLayout {
+            align: 0.5,
+            grow: 0.0,
+            margin: Rect {
+                top: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .with(GameButtonProps {
+            text: "Save".into(),
+            // notify_id: id.to_owned(),
+            message: "settings".into(),
+            ..Default::default()
+        });
+
+        let button_box_props = Props::new(())
+            .with(FlexBoxProps {
+                // TODO: Enable Wrap? Causes problems with margin maybe due to bug mentioned above.
+                wrap: false,
+                direction: FlexBoxDirection::HorizontalLeftToRight,
+                separation: 17.,
+                ..Default::default()
+            })
+            .with(FlexBoxItemLayout {
+                grow: 0.0,
+                align: 0.5,
+                margin: Rect {
+                    top: 8.,
+                    bottom: 8.,
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+
+        widget! {
+            (nav_content_box [
+                (nav_vertical_paper: {panel_props} [
+                    (text_box: {title_props})
+                    (vertical_box)
+                    (flex_box: {button_box_props} [
+                        (game_button: {cancel_button_props})
+                        (game_button: {save_button_props})
+                    ])
+                ])
+            ])
         }
     }
 }

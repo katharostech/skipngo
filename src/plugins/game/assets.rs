@@ -1,11 +1,11 @@
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 
 use bevy::{
     asset::{AssetLoader, AssetPath, LoadedAsset},
     prelude::*,
     reflect::TypeUuid,
 };
-use bevy_retro::prelude::*;
+use bevy_retro::prelude::{ui::raui::prelude::{PropsData, Prefab}, *};
 
 use super::*;
 
@@ -24,7 +24,7 @@ pub enum AssetLoaderError {
 }
 
 /// The core info about the game provided by the .game.yaml file
-#[derive(Deserialize, TypeUuid, Clone)]
+#[derive(PropsData, Deserialize, TypeUuid, Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 #[uuid = "c19826f5-e474-4ad0-a0fc-c24f144a1b79"]
@@ -46,7 +46,7 @@ pub struct GameInfo {
 }
 
 /// Splash screen settings
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub struct SplashScreen {
@@ -55,7 +55,7 @@ pub struct SplashScreen {
 }
 
 /// The splash image to use for the game
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub struct SplashImage {
@@ -64,17 +64,18 @@ pub struct SplashImage {
 }
 
 /// The definition of the UI theme
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub struct UiTheme {
-    // pub panel: UiBoxImage,
+    pub default_font: String,
+    pub panel: UiBoxImage,
     pub button_up: UiBoxImage,
     pub button_down: UiBoxImage,
 }
 
 // Settings for a 9-patch UI image
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub struct UiBoxImage {
@@ -85,7 +86,7 @@ pub struct UiBoxImage {
 }
 
 /// A serializable version of the bevy_retro [`CameraSize`]
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(remote = "CameraSize")]
 #[serde(rename_all = "kebab-case")]
 pub enum CameraSizeDef {
