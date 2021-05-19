@@ -34,12 +34,54 @@ pub struct GameInfo {
     /// The path to the game map
     pub map: String,
     /// The name of the level to start the game in
-    pub starting_level: String,
+    pub game_start_level: String,
     /// The path to the character that you will play as
     pub player_character: String,
     /// The camera size
     #[serde(with = "CameraSizeDef")]
     pub camera_size: CameraSize,
+    /// Splash screen configuration
+    pub splash_screen: SplashScreen,
+    pub ui_theme: UiTheme,
+}
+
+/// Splash screen settings
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct SplashScreen {
+    pub splash_image: SplashImage,
+    pub background_level: String,
+}
+
+/// The splash image to use for the game
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct SplashImage {
+    pub path: String,
+    pub size: UVec2,
+}
+
+/// The definition of the UI theme
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct UiTheme {
+    // pub panel: UiBoxImage,
+    pub button_up: UiBoxImage,
+    pub button_down: UiBoxImage,
+}
+
+// Settings for a 9-patch UI image
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct UiBoxImage {
+    pub image: String,
+    pub border_size: u32,
+    #[serde(default)]
+    pub only_frame: bool,
 }
 
 /// A serializable version of the bevy_retro [`CameraSize`]

@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
     utils::HashSet,
 };
-use bevy_retro::prelude::*;
+use bevy_retro::{prelude::*, ui::raui::prelude::widget};
 use kira::parameter::tween::Tween;
 
 use super::*;
@@ -12,19 +12,22 @@ use super::*;
 /// The game states
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GameState {
-    /// The game is loading initial game data and spawning the initial items
+    /// The game is loading initial game data, spawning the map, and displaying the start menu
     Init,
+    /// The game is showing the start menu
+    StartMenu,
     /// The game is loading the map and spawning the player
-    LoadingMap,
-    /// The game is running!
-    Running,
+    LoadingGame,
+    /// The game is playing the main game
+    Playing,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, StageLabel)]
 enum GameStage {
     Init,
-    Load,
-    Update,
+    StartMenu,
+    LoadingGame,
+    Playing,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug, SystemLabel, AmbiguitySetLabel)]
@@ -45,6 +48,7 @@ pub fn add_systems(app: &mut AppBuilder) {
         ))
         // Set the inital game state
         .add_state(GameState::Init)
+        // Loading initial game data
         .add_stage_after(
             CoreStage::Update,
             GameStage::Init,
@@ -63,15 +67,34 @@ pub fn add_systems(app: &mut AppBuilder) {
                     .with_system(await_init.system()),
             ),
         )
-        // Player spawn
+        // Showing the start menu
         .add_stage_after(
             GameStage::Init,
-            GameStage::Load,
+            GameStage::StartMenu,
             SystemStage::parallel().with_system_set(
                 SystemSet::new()
                     .with_run_criteria(
                         (|state: Res<State<GameState>>| {
-                            if state.current() == &GameState::LoadingMap {
+                            if state.current() == &GameState::StartMenu {
+                                ShouldRun::Yes
+                            } else {
+                                ShouldRun::No
+                            }
+                        })
+                        .system(),
+                    )
+                    .with_system(setup_start_menu.system()),
+            ),
+        )
+        // Spawning player and loading game level
+        .add_stage_after(
+            GameStage::Init,
+            GameStage::LoadingGame,
+            SystemStage::parallel().with_system_set(
+                SystemSet::new()
+                    .with_run_criteria(
+                        (|state: Res<State<GameState>>| {
+                            if state.current() == &GameState::LoadingGame {
                                 ShouldRun::Yes
                             } else {
                                 ShouldRun::No
@@ -82,17 +105,17 @@ pub fn add_systems(app: &mut AppBuilder) {
                     .with_system(spawn_player_and_setup_level.system()),
             ),
         )
-        // Add update systems
+        // Playing the game
         .add_stage_after(
-            GameStage::Load,
-            GameStage::Update,
+            GameStage::LoadingGame,
+            GameStage::Playing,
             SystemStage::parallel().with_system_set(
                 SystemSet::new()
                     .with_run_criteria(
                         FixedTimestep::step(0.012).chain(
                             // Workaround: https://github.com/bevyengine/bevy/issues/1839
                             (|In(input): In<ShouldRun>, state: Res<State<GameState>>| {
-                                if state.current() == &GameState::Running {
+                                if state.current() == &GameState::Playing {
                                     input
                                 } else {
                                     ShouldRun::No
@@ -153,6 +176,7 @@ pub fn await_init(
     asset_server: Res<AssetServer>,
     mut state: ResMut<State<GameState>>,
     engine_config: Res<EngineConfig>,
+    mut ui_tree: ResMut<UiTree>,
     #[cfg(not(wasm))] mut windows: ResMut<Windows>,
 ) {
     debug!("Awaiting game info load...");
@@ -199,10 +223,78 @@ pub fn await_init(
         // Add the game info as a resource
         commands.insert_resource(game_info.clone());
         // Add the current level resource
-        commands.insert_resource(CurrentLevel(game_info.starting_level.clone()));
+        commands.insert_resource(CurrentLevel(
+            game_info.splash_screen.background_level.clone(),
+        ));
+
+        // Set the UI tree to the start menu
+        *ui_tree = UiTree(widget! {
+            (ui::start_menu)
+        });
 
         // Transition to map loading state
-        state.push(GameState::LoadingMap).unwrap();
+        state.push(GameState::StartMenu).unwrap();
+    }
+}
+
+/// Position the camera on the start menu
+pub fn setup_start_menu(
+    mut completed: Local<bool>,
+    mut cameras: Query<&mut Position, With<Camera>>,
+    mut maps_query: Query<&Handle<LdtkMap>>,
+    current_level: Res<CurrentLevel>,
+    mut map_layers: Query<(&LdtkMapLayer, &mut Visible)>,
+    map_assets: Res<Assets<LdtkMap>>,
+) {
+    // Run only once
+    if *completed {
+        return;
+    }
+
+    // Get our camera and map information
+    let mut camera_pos = if let Ok(pos) = cameras.single_mut() {
+        pos
+    } else {
+        return;
+    };
+    let map_handle = if let Ok(handle) = maps_query.single_mut() {
+        handle
+    } else {
+        return;
+    };
+    let map = if let Some(map) = map_assets.get(map_handle) {
+        map
+    } else {
+        return;
+    };
+
+    // Get the current level from the map
+    let level = map
+        .project
+        .levels
+        .iter()
+        .find(|x| x.identifier == current_level.as_str())
+        .unwrap();
+
+    // Hide all other map layers
+    let mut hid_layers = false;
+    for (layer, mut visible) in map_layers.iter_mut() {
+        if layer.level_identifier != current_level.as_str() {
+            hid_layers = true;
+            *visible = Visible(false);
+        }
+    }
+
+    // Center the camera on the map level
+    *camera_pos = Position::new(
+        level.world_x + level.px_wid / 2,
+        level.world_y + level.px_hei / 2,
+        0,
+    );
+
+    // Mark completed so we don't run this system again
+    if !*completed && hid_layers {
+        *completed = true;
     }
 }
 
@@ -215,8 +307,9 @@ pub fn spawn_player_and_setup_level(
     game_info: Res<GameInfo>,
     current_level: Res<CurrentLevel>,
     mut sound_controller: SoundController,
+    mut ui_tree: ResMut<UiTree>,
 ) {
-    for map_handle in map_query.iter() {
+    if let Ok(map_handle) = map_query.single() {
         if let Some(map) = map_assets.get(map_handle) {
             debug!("Map loaded: spawning player");
             let level = &map
@@ -312,9 +405,14 @@ pub fn spawn_player_and_setup_level(
                 }
             }
 
+            // Remove the start menu
+            *ui_tree = UiTree(widget! {
+                ()
+            });
+
             // Go to the running state
             debug!("Going into running state");
-            state.push(GameState::Running).unwrap();
+            state.push(GameState::Playing).unwrap();
         }
     }
 }
@@ -663,7 +761,7 @@ pub fn camera_follow_system(
         return;
     };
 
-    if let Some((camera, mut camera_pos)) = cameras.iter_mut().next() {
+    if let Ok((camera, mut camera_pos)) = cameras.single_mut() {
         // Start by making the camera stick to the player
         if let Some(character_pos) = characters.iter().next() {
             camera_pos.x = character_pos.x;
@@ -985,6 +1083,287 @@ pub fn change_level(
                     );
                 }
             }
+        }
+    }
+}
+
+mod ui {
+    use bevy::prelude::World;
+    use bevy_retro::ui::raui::prelude::*;
+
+    use super::{CurrentLevel, GameInfo, GameState, State};
+
+    fn use_start_menu(ctx: &mut WidgetContext) {
+        ctx.life_cycle.change(|ctx| {
+            for msg in ctx.messenger.messages {
+                if let Some(msg) = msg.as_any().downcast_ref::<GameButtonMessage>() {
+                    if &msg.0 == "start" {
+                        let world: &mut World = ctx.process_context.get_mut().unwrap();
+                        let start_level = world
+                            .get_resource::<GameInfo>()
+                            .unwrap()
+                            .game_start_level
+                            .clone();
+
+                        {
+                            let mut current_level =
+                                world.get_resource_mut::<CurrentLevel>().unwrap();
+                            *current_level = CurrentLevel(start_level);
+                        }
+                        {
+                            let mut state = world.get_resource_mut::<State<GameState>>().unwrap();
+                            if state.current() != &GameState::LoadingGame {
+                                state.push(GameState::LoadingGame).unwrap();
+                            }
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    /// The UI tree used for the start menu
+    #[pre_hooks(use_start_menu)]
+    pub fn start_menu(mut ctx: WidgetContext) -> WidgetNode {
+        let WidgetContext {
+            id,
+            process_context,
+            ..
+        } = ctx;
+
+        // Get the game info from the world
+        let world: &mut World = process_context.get_mut().unwrap();
+        let game_info = world.get_resource::<GameInfo>().unwrap();
+
+        // Create shared props containing the theme
+        let shared_props = Props::default()
+            // Add the theme properties
+            .with({
+                let mut theme = ThemeProps::default();
+
+                // theme.content_backgrounds.insert(
+                //     String::new(),
+                //     ThemedImageMaterial::Image(ImageBoxImage {
+                //         id: "ui/panel.png".to_owned(),
+                //         scaling: ImageBoxImageScaling::Frame((20.0, false).into()),
+                //         ..Default::default()
+                //     }),
+                // );
+
+                theme.content_backgrounds.insert(
+                    String::from("button-up"),
+                    ThemedImageMaterial::Image(ImageBoxImage {
+                        id: game_info.ui_theme.button_up.image.clone(),
+                        scaling: ImageBoxImageScaling::Frame(
+                            (
+                                game_info.ui_theme.button_up.border_size as f32,
+                                game_info.ui_theme.button_up.only_frame,
+                            )
+                                .into(),
+                        ),
+                        ..Default::default()
+                    }),
+                );
+
+                theme.content_backgrounds.insert(
+                    String::from("button-down"),
+                    ThemedImageMaterial::Image(ImageBoxImage {
+                        id: game_info.ui_theme.button_down.image.clone(),
+                        scaling: ImageBoxImageScaling::Frame(
+                            (
+                                game_info.ui_theme.button_down.border_size as f32,
+                                game_info.ui_theme.button_down.only_frame,
+                            )
+                                .into(),
+                        ),
+                        ..Default::default()
+                    }),
+                );
+
+                theme.text_variants.insert(
+                    String::new(),
+                    ThemedTextMaterial {
+                        font: TextBoxFont {
+                            name: "cozette.bdf".into(),
+                            // Font's in Bevy Retro don't really have sizes so we can just set this to
+                            // one
+                            size: 1.0,
+                        },
+                        ..Default::default()
+                    },
+                );
+
+                theme
+            });
+
+        let vertical_box_props = VerticalBoxProps {
+            separation: 0.,
+            ..Default::default()
+        };
+
+        // The title image props
+        let title_image_props = Props::new(ImageBoxProps {
+            material: ImageBoxMaterial::Image(ImageBoxImage {
+                id: game_info.splash_screen.splash_image.path.clone(),
+                ..Default::default()
+            }),
+            width: ImageBoxSizeValue::Exact(game_info.splash_screen.splash_image.size.x as f32),
+            height: ImageBoxSizeValue::Exact(game_info.splash_screen.splash_image.size.y as f32),
+            ..Default::default()
+        })
+        .with(FlexBoxItemLayout {
+            align: 0.5,
+            grow: 0.0,
+            margin: Rect {
+                top: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        let start_button_rops = Props::new(FlexBoxItemLayout {
+            align: 0.5,
+            grow: 0.0,
+            margin: Rect {
+                top: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .with(GameButtonProps {
+            text: "Start Game".into(),
+            notify_id: id.to_owned().into(),
+            message: "start".into(),
+        });
+
+        let settings_button_props = Props::new(FlexBoxItemLayout {
+            align: 0.5,
+            grow: 0.0,
+            margin: Rect {
+                top: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .with(GameButtonProps {
+            text: "Settings".into(),
+            notify_id: id.to_owned().into(),
+            message: "settings".into(),
+        });
+
+        widget! {
+            (nav_vertical_box: {vertical_box_props} | {shared_props} [
+                (image_box: {title_image_props})
+                (game_button: {start_button_rops})
+                (game_button: {settings_button_props})
+            ])
+        }
+    }
+
+    #[derive(PropsData, Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+    struct GameButtonProps {
+        text: String,
+        notify_id: WidgetId,
+        message: String,
+    }
+
+    #[derive(MessageData, Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+    struct GameButtonMessage(String);
+
+    fn use_game_button(ctx: &mut WidgetContext) {
+        ctx.life_cycle.change(|ctx| {
+            let ButtonProps { trigger, .. } = ctx.state.read_cloned_or_default();
+            let GameButtonProps {
+                notify_id, message, ..
+            } = ctx.props.read_cloned_or_default();
+
+            if trigger {
+                ctx.messenger.write(notify_id, GameButtonMessage(message));
+            }
+        });
+    }
+
+    #[pre_hooks(
+        // This allows us to get a `ButtonProps` instance from our widget state which will keep
+        // track of whether or not we are clicked, hovered over, etc.
+        use_game_button,
+        use_button_notified_state,
+    )]
+    fn game_button(mut ctx: WidgetContext) -> WidgetNode {
+        // Get our button state
+        let ButtonProps {
+            selected: hover,
+            trigger: clicked,
+            ..
+        } = ctx.state.read_cloned_or_default();
+
+        let GameButtonProps {
+            text: button_text, ..
+        } = ctx.props.read_cloned_or_default();
+
+        let button_props = ctx
+            .props
+            .clone()
+            .with(NavItemActive)
+            .with(ButtonNotifyProps(ctx.id.to_owned().into()));
+
+        let button_panel_props = ctx.props.clone().with(PaperProps {
+            frame: None,
+            variant: if clicked {
+                String::from("button-down")
+            } else {
+                // TODO: Somehow pre-load the button-up image so that it doesn't flash
+                // blank for a second the first time a button is clicked
+                String::from("button-up")
+            },
+            ..Default::default()
+        });
+
+        let scale = if hover { 1.1 } else { 1. };
+
+        let label_props = Props::new(TextBoxProps {
+            text: button_text,
+            width: TextBoxSizeValue::Fill,
+            height: TextBoxSizeValue::Fill,
+            horizontal_align: TextBoxHorizontalAlign::Center,
+            vertical_align: TextBoxVerticalAlign::Middle,
+            font: TextBoxFont {
+                name: "fonts/cozette.bdf".to_string(),
+                size: 1.,
+            },
+            transform: Transform {
+                translation: Vec2 {
+                    x: 0.,
+                    y: if clicked { 1. } else { 0. },
+                },
+                // scale: Vec2::from(1.0 / scale), // Undo button scale to make sure text stays same size
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        let size_box_props = Props::new(SizeBoxProps {
+            width: SizeBoxSizeValue::Exact(70.),
+            height: SizeBoxSizeValue::Exact(18.),
+            transform: Transform {
+                scale: Vec2::from(scale),
+                translation: Vec2 {
+                    x: if hover { (-75. * scale + 75.) / 2. } else { 0. },
+                    y: if hover { (-20. * scale + 20.) / 2. } else { 0. },
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        widget! {
+            (button: {button_props} {
+                content = (size_box: {size_box_props} {
+                    content = (horizontal_paper: {button_panel_props} [
+                        (text_box: {label_props})
+                    ])
+                })
+            })
         }
     }
 }
