@@ -1232,7 +1232,7 @@ mod ui {
         })
         .with(GameButtonProps {
             text: "Start Game".into(),
-            notify_id: id.to_owned().into(),
+            notify_id: id.to_owned(),
             message: "start".into(),
         });
 
@@ -1247,7 +1247,7 @@ mod ui {
         })
         .with(GameButtonProps {
             text: "Settings".into(),
-            notify_id: id.to_owned().into(),
+            notify_id: id.to_owned(),
             message: "settings".into(),
         });
 
@@ -1316,7 +1316,6 @@ mod ui {
                 // blank for a second the first time a button is clicked
                 String::from("button-up")
             },
-            ..Default::default()
         });
 
         let scale = if hover { 1.1 } else { 1. };
