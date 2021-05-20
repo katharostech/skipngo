@@ -1205,6 +1205,20 @@ mod ui {
                     }),
                 );
 
+                theme.switch_variants.insert(
+                    "checkbox".to_owned(),
+                    ThemedSwitchMaterial {
+                        on: ThemedImageMaterial::Image(ImageBoxImage {
+                            id: game_info.ui_theme.checkbox.checked.clone(),
+                            ..Default::default()
+                        }),
+                        off: ThemedImageMaterial::Image(ImageBoxImage {
+                            id: game_info.ui_theme.checkbox.unchecked.clone(),
+                            ..Default::default()
+                        }),
+                    },
+                );
+
                 theme.text_variants.insert(
                     String::new(),
                     ThemedTextMaterial {
@@ -1217,6 +1231,8 @@ mod ui {
                         ..Default::default()
                     },
                 );
+
+                theme.icons_level_sizes = vec![8., 12., 16.];
 
                 theme
             })
@@ -1259,7 +1275,7 @@ mod ui {
         .with(GameButtonProps {
             text: "Start Game".into(),
             notify_id: id.to_owned(),
-            message: "start".into(),
+            message_name: "start".into(),
         });
 
         let settings_button_props = Props::new(FlexBoxItemLayout {
@@ -1274,7 +1290,7 @@ mod ui {
         .with(GameButtonProps {
             text: "Settings".into(),
             notify_id: id.to_owned(),
-            message: "show_settings".into(),
+            message_name: "show_settings".into(),
         });
 
         let content = if show_settings {
@@ -1308,7 +1324,7 @@ mod ui {
     struct GameButtonProps {
         text: String,
         notify_id: WidgetId,
-        message: String,
+        message_name: String,
     }
 
     #[derive(MessageData, Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
@@ -1318,7 +1334,9 @@ mod ui {
         ctx.life_cycle.change(|ctx| {
             let ButtonProps { trigger, .. } = ctx.state.read_cloned_or_default();
             let GameButtonProps {
-                notify_id, message, ..
+                notify_id,
+                message_name: message,
+                ..
             } = ctx.props.read_cloned_or_default();
 
             if trigger {
@@ -1416,13 +1434,66 @@ mod ui {
         cancel_notify_message: String,
     }
 
-    fn settings_panel(ctx: WidgetContext) -> WidgetNode {
+    #[derive(PropsData, Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+    struct SettingsPanelState {
+        crt_filter: bool,
+        pixel_aspect_4_3: bool,
+    }
+
+    fn use_settings_panel(ctx: &mut WidgetContext) {
+        ctx.life_cycle.change(|ctx| {
+            for msg in ctx.messenger.messages {
+                // Respond to click settings change messages
+                if let Some(msg) = msg.as_any().downcast_ref::<ButtonNotifyMessage>() {
+                    if msg.trigger_start() && msg.sender.ends_with("pixel_aspect") {
+                        let mut state: SettingsPanelState = ctx.state.read_cloned_or_default();
+
+                        state.pixel_aspect_4_3 = !state.pixel_aspect_4_3;
+
+                        ctx.state.write(state).unwrap();
+                    } else if msg.trigger_start() && msg.sender.ends_with("crt_filter") {
+                        let mut state: SettingsPanelState = ctx.state.read_cloned_or_default();
+
+                        state.crt_filter = !state.crt_filter;
+
+                        ctx.state.write(state).unwrap();
+                    }
+                }
+            }
+
+            let state: SettingsPanelState = ctx.state.read_cloned_or_default();
+            let world: &mut World = ctx.process_context.get_mut().unwrap();
+            let mut query = world.query::<&mut super::Camera>();
+            let mut camera = query.iter_mut(world).next().expect("Expected one camera");
+
+            camera.custom_shader = if state.crt_filter {
+                Some(super::CrtShader::default().get_shader())
+            } else {
+                None
+            };
+
+            camera.pixel_aspect_ratio = if state.pixel_aspect_4_3 {
+                4.0 / 3.0
+            } else {
+                1.0
+            };
+        });
+    }
+
+    #[pre_hooks(use_settings_panel)]
+    fn settings_panel(mut ctx: WidgetContext) -> WidgetNode {
         let game_info: GameInfo = ctx.shared_props.read_cloned().unwrap();
         let SettingsPanelProps {
             cancel_notify_id,
             cancel_notify_message,
         } = ctx.props.read_cloned_or_default();
 
+        let SettingsPanelState {
+            crt_filter,
+            pixel_aspect_4_3,
+        } = ctx.state.read_cloned_or_default();
+
+        // Settings panel
         let panel_props = Props::new(ContentBoxItemLayout {
             // TODO: Open RAUI bug, margin somehow applies to both the inside and outside of the panel
             margin: Rect {
@@ -1438,6 +1509,7 @@ mod ui {
             frame: None,
         });
 
+        // "Settings" title
         let title_props = Props::new(TextBoxProps {
             text: "Settings".into(),
             font: TextBoxFont {
@@ -1452,8 +1524,14 @@ mod ui {
                 a: 1.,
             },
             ..Default::default()
+        })
+        .with(FlexBoxItemLayout {
+            grow: 0.,
+            basis: Some(16.),
+            ..Default::default()
         });
 
+        // Cancel button
         let cancel_button_props = Props::new(FlexBoxItemLayout {
             align: 0.5,
             grow: 0.0,
@@ -1466,9 +1544,10 @@ mod ui {
         .with(GameButtonProps {
             text: "Cancel".into(),
             notify_id: cancel_notify_id,
-            message: cancel_notify_message,
+            message_name: cancel_notify_message,
         });
 
+        // Save button
         let save_button_props = Props::new(FlexBoxItemLayout {
             align: 0.5,
             grow: 0.0,
@@ -1481,14 +1560,14 @@ mod ui {
         .with(GameButtonProps {
             text: "Save".into(),
             // notify_id: id.to_owned(),
-            message: "settings".into(),
+            message_name: "settings".into(),
             ..Default::default()
         });
 
+        // Container for buttons
         let button_box_props = Props::new(())
             .with(FlexBoxProps {
-                // TODO: Enable Wrap? Causes problems with margin maybe due to bug mentioned above.
-                wrap: false,
+                wrap: true,
                 direction: FlexBoxDirection::HorizontalLeftToRight,
                 separation: 17.,
                 ..Default::default()
@@ -1504,11 +1583,139 @@ mod ui {
                 ..Default::default()
             });
 
+        // "Graphics" title
+        let graphics_settings_title_props = Props::new(TextBoxProps {
+            text: "Graphics".into(),
+            font: TextBoxFont {
+                name: game_info.ui_theme.default_font.clone(),
+                size: 1.0,
+            },
+            color: Color {
+                r: 0.,
+                g: 0.,
+                b: 0.,
+                a: 1.,
+            },
+            ..Default::default()
+        })
+        .with(FlexBoxItemLayout {
+            grow: 0.0,
+            align: 0.0,
+            basis: Some(16.),
+            margin: Rect {
+                left: 5.,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        // Wrapper for check box settings
+        let check_box_wrapper_props = Props::new(FlexBoxItemLayout {
+            grow: 0.0,
+            basis: Some(17.),
+            margin: Rect {
+                top: 5.,
+                left: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        // CRT Filter check box
+        let crt_filter_check_props = Props::new(SwitchPaperProps {
+            on: crt_filter,
+            variant: "checkbox".into(),
+            size_level: 1,
+        })
+        .with(NavItemActive)
+        .with(ButtonNotifyProps(ctx.id.to_owned().into()))
+        .with(ThemedWidgetProps {
+            color: ThemeColor::Primary,
+            variant: ThemeVariant::ContentOnly,
+        })
+        .with(FlexBoxItemLayout {
+            grow: 0.0,
+            ..Default::default()
+        });
+
+        // CRT Filter text
+        let crt_filter_text_props = Props::new(TextBoxProps {
+            text: "CRT Filter".into(),
+            font: TextBoxFont {
+                name: game_info.ui_theme.default_font.clone(),
+                size: 1.0,
+            },
+            color: Color {
+                r: 0.,
+                g: 0.,
+                b: 0.,
+                a: 1.,
+            },
+            ..Default::default()
+        })
+        .with(FlexBoxItemLayout {
+            margin: Rect {
+                left: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        // 4/3 Pixel Aspect Ratio checkbox
+        let pixel_aspect_check_props = Props::new(SwitchPaperProps {
+            on: pixel_aspect_4_3,
+            variant: "checkbox".into(),
+            size_level: 1,
+        })
+        .with(NavItemActive)
+        .with(ButtonNotifyProps(ctx.id.to_owned().into()))
+        .with(ThemedWidgetProps {
+            color: ThemeColor::Primary,
+            variant: ThemeVariant::ContentOnly,
+        })
+        .with(FlexBoxItemLayout {
+            grow: 0.0,
+            ..Default::default()
+        });
+
+        // 4/3 Pixel Aspect Ratio text
+        let pixel_aspect_text_props = Props::new(TextBoxProps {
+            text: "4/3 Pixel Aspect Ratio".into(),
+            font: TextBoxFont {
+                name: game_info.ui_theme.default_font,
+                size: 1.0,
+            },
+            color: Color {
+                r: 0.,
+                g: 0.,
+                b: 0.,
+                a: 1.,
+            },
+            ..Default::default()
+        })
+        .with(FlexBoxItemLayout {
+            margin: Rect {
+                left: 10.,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
         widget! {
             (nav_content_box [
                 (nav_vertical_paper: {panel_props} [
                     (text_box: {title_props})
-                    (vertical_box)
+                    (vertical_box [
+                        (text_box: {graphics_settings_title_props})
+                        (horizontal_box: {check_box_wrapper_props.clone()} [
+                            (#{"crt_filter"} switch_button_paper: {crt_filter_check_props})
+                            (text_box: {crt_filter_text_props})
+                        ])
+                        (horizontal_box: {check_box_wrapper_props} [
+                            (#{"pixel_aspect"} switch_button_paper: {pixel_aspect_check_props})
+                            (text_box: {pixel_aspect_text_props})
+                        ])
+                    ])
                     (flex_box: {button_box_props} [
                         (game_button: {cancel_button_props})
                         (game_button: {save_button_props})

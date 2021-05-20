@@ -1,11 +1,14 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use bevy::{
     asset::{AssetLoader, AssetPath, LoadedAsset},
     prelude::*,
     reflect::TypeUuid,
 };
-use bevy_retro::prelude::{ui::raui::prelude::{PropsData, Prefab}, *};
+use bevy_retro::prelude::{
+    ui::raui::prelude::{Prefab, PropsData},
+    *,
+};
 
 use super::*;
 
@@ -72,6 +75,16 @@ pub struct UiTheme {
     pub panel: UiBoxImage,
     pub button_up: UiBoxImage,
     pub button_down: UiBoxImage,
+    pub checkbox: UiCheckboxImages,
+}
+
+/// The theme for a checkbox
+#[derive(Deserialize, Clone, Serialize, Debug)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct UiCheckboxImages {
+    pub checked: String,
+    pub unchecked: String,
 }
 
 // Settings for a 9-patch UI image
