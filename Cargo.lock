@@ -433,6 +433,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro"
 version = "0.0.0"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#5628e228e44ec2d5c7f0612d79ad19f877e59586"
 dependencies = [
  "bevy",
  "bevy_retro_audio",
@@ -446,6 +447,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro_audio"
 version = "0.0.0"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#5628e228e44ec2d5c7f0612d79ad19f877e59586"
 dependencies = [
  "anyhow",
  "bevy",
@@ -457,6 +459,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro_core"
 version = "0.0.0"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#5628e228e44ec2d5c7f0612d79ad19f877e59586"
 dependencies = [
  "anyhow",
  "bevy",
@@ -484,6 +487,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro_ldtk"
 version = "0.0.1"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#5628e228e44ec2d5c7f0612d79ad19f877e59586"
 dependencies = [
  "anyhow",
  "bevy",
@@ -496,10 +500,12 @@ dependencies = [
 [[package]]
 name = "bevy_retro_macros"
 version = "0.1.0"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#5628e228e44ec2d5c7f0612d79ad19f877e59586"
 
 [[package]]
 name = "bevy_retro_text"
 version = "0.1.0"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#5628e228e44ec2d5c7f0612d79ad19f877e59586"
 dependencies = [
  "anyhow",
  "bdf",
@@ -513,6 +519,7 @@ dependencies = [
 [[package]]
 name = "bevy_retro_ui"
 version = "0.1.0"
+source = "git+https://github.com/katharostech/bevy_retro?branch=master#5628e228e44ec2d5c7f0612d79ad19f877e59586"
 dependencies = [
  "bevy",
  "bevy_retro_core",

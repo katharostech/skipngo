@@ -47,6 +47,3 @@ lto = true
 
 [patch.crates-io]
 winit = { git = "https://github.com/katharostech/winit", branch = "web-sys-touch-events" }
-
-[patch.'https://github.com/katharostech/bevy_retro']
-bevy_retro = { path = "../bevy_retro" }
