@@ -1,0 +1,168 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [ master, staging, trying ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  # Disable debug info ( for build speed ) and deny warnings
+  RUSTFLAGS: "-C debuginfo=0 -D warnings"
+  # Enable Cargo color
+  CARGO_TERM_COLOR: always
+  # Disable incremental builds ( because we only build once in CI )
+  CARGO_INCREMENTAL: 0
+
+jobs:
+
+  #
+  # Checks & Tests
+  #
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install alsa and udev
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
+        if: runner.os == 'linux'
+
+      - name: Cargo Registry Cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry
+
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+
+      # No need to run cargo check because clippy will check it
+      - name: Clippy
+        run: cargo clippy
+
+  build-and-test-native:
+    needs: check
+    strategy:
+      matrix:
+        os: [ 'windows-latest', 'ubuntu-latest', 'macos-latest' ]
+        toolchain: [ 'stable', 'nightly' ]
+    continue-on-error: ${{ matrix.toolchain == 'nightly' }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install alsa and udev
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
+        if: runner.os == 'linux'
+
+      - name: Cargo Registry Cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry
+
+      - name: Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+
+      # No need to build first because the test command will build the crate
+      - name: Test
+        run: cargo test --verbose
+
+  build-wasm:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      # We have overrides for the optimization levels of debug builds in
+      # our Cargo.toml. This sets them back to normal to improve build times.
+      CARGO_PROFILE_DEV_DEBUG: true
+      CARGO_PROFILE_DEV_OPT_LEVEL: 0
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cargo Registry Cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry
+
+      - name: Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Build
+        run: cargo build --verbose --target wasm32-unknown-unknown
+
+  #
+  # Release Builds
+  #
+
+  build-release-native:
+    # needs: check
+    strategy:
+      matrix:
+        os: [ 'windows-latest', 'ubuntu-latest', 'macos-latest' ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install alsa and udev
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
+        if: runner.os == 'linux'
+
+      - name: Cargo Registry Cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry
+
+      - name: Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.52.1
+          override: true
+
+      - name: Build
+        run: cargo build --release --verbose
+
+      - name: Strip ( Windows )
+        if: ${{ runner.os == 'Windows' }}
+        run: strip target/release/skipngo.exe
+
+      - name: Strip ( Unix )
+        if: ${{ runner.os != 'Windows' }}
+        run: strip target/release/skipngo
+
+      - name: Upload Executable ( Windows )
+        if: ${{ runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: skipngo-${{ runner.os }}
+          path: target/release/skipngo.exe
+
+      - name: Upload Executable ( Unix )
+        if: ${{ runner.os != 'Windows' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: skipngo-${{ runner.os }}
+          path: target/release/skipngo
+    
