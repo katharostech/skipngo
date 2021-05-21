@@ -1095,10 +1095,11 @@ mod ui {
 
     fn use_start_menu(ctx: &mut WidgetContext) {
         ctx.life_cycle.change(|ctx| {
+            let world: &mut World = ctx.process_context.get_mut().unwrap();
+
             for msg in ctx.messenger.messages {
                 if let Some(msg) = msg.as_any().downcast_ref::<GameButtonMessage>() {
                     if &msg.0 == "start" {
-                        let world: &mut World = ctx.process_context.get_mut().unwrap();
                         let start_level = world
                             .get_resource::<GameInfo>()
                             .unwrap()
@@ -1117,15 +1118,46 @@ mod ui {
                             }
                         }
                     } else if &msg.0 == "show_settings" {
+                        let mut query = world.query::<&super::Camera>();
+                        let camera = query.iter_mut(world).next().expect("Expected one camera");
+
+                        let previous_crt_filter_enabled = camera.custom_shader.is_some();
+                        let previous_pixel_aspect_4_3_enabled =
+                            camera.pixel_aspect_ratio.abs() - 1.0 > f32::EPSILON;
+
                         ctx.state
                             .write(StartMenuState {
                                 show_settings: true,
+                                previous_crt_filter_enabled,
+                                previous_pixel_aspect_4_3_enabled,
                             })
                             .unwrap();
-                    } else if &msg.0 == "hide_settings" {
+                    } else if &msg.0 == "cancel_settings" {
+                        let mut query = world.query::<&mut super::Camera>();
+                        let mut camera = query.iter_mut(world).next().expect("Expected one camera");
+
                         ctx.state
-                            .write(StartMenuState {
-                                show_settings: false,
+                            .mutate_cloned(|state: &mut StartMenuState| {
+                                camera.pixel_aspect_ratio =
+                                    if state.previous_pixel_aspect_4_3_enabled {
+                                        4. / 3.
+                                    } else {
+                                        1.
+                                    };
+
+                                camera.custom_shader = if state.previous_crt_filter_enabled {
+                                    Some(super::CrtShader::default().get_shader())
+                                } else {
+                                    None
+                                };
+
+                                state.show_settings = false;
+                            })
+                            .unwrap();
+                    } else if &msg.0 == "save_settings" {
+                        ctx.state
+                            .mutate_cloned(|state: &mut StartMenuState| {
+                                state.show_settings = false;
                             })
                             .unwrap();
                     }
@@ -1137,6 +1169,8 @@ mod ui {
     #[derive(PropsData, Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
     struct StartMenuState {
         show_settings: bool,
+        previous_crt_filter_enabled: bool,
+        previous_pixel_aspect_4_3_enabled: bool,
     }
 
     /// The UI tree used for the start menu
@@ -1148,7 +1182,7 @@ mod ui {
             ..
         } = ctx;
 
-        let StartMenuState { show_settings } = ctx.state.read_cloned_or_default();
+        let StartMenuState { show_settings, .. } = ctx.state.read_cloned_or_default();
 
         // Get the game info from the world
         let world: &mut World = process_context.get_mut().unwrap();
@@ -1296,7 +1330,9 @@ mod ui {
         let content = if show_settings {
             let props = Props::new(SettingsPanelProps {
                 cancel_notify_id: ctx.id.to_owned(),
-                cancel_notify_message: "hide_settings".into(),
+                cancel_notify_message: "cancel_settings".into(),
+                save_notify_id: ctx.id.to_owned(),
+                save_notify_message: "save_settings".into(),
             });
 
             widget! {
@@ -1432,51 +1468,34 @@ mod ui {
     struct SettingsPanelProps {
         cancel_notify_id: WidgetId,
         cancel_notify_message: String,
-    }
-
-    #[derive(PropsData, Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
-    struct SettingsPanelState {
-        crt_filter: bool,
-        pixel_aspect_4_3: bool,
+        save_notify_id: WidgetId,
+        save_notify_message: String,
     }
 
     fn use_settings_panel(ctx: &mut WidgetContext) {
         ctx.life_cycle.change(|ctx| {
-            for msg in ctx.messenger.messages {
-                // Respond to click settings change messages
-                if let Some(msg) = msg.as_any().downcast_ref::<ButtonNotifyMessage>() {
-                    if msg.trigger_start() && msg.sender.ends_with("pixel_aspect") {
-                        let mut state: SettingsPanelState = ctx.state.read_cloned_or_default();
-
-                        state.pixel_aspect_4_3 = !state.pixel_aspect_4_3;
-
-                        ctx.state.write(state).unwrap();
-                    } else if msg.trigger_start() && msg.sender.ends_with("crt_filter") {
-                        let mut state: SettingsPanelState = ctx.state.read_cloned_or_default();
-
-                        state.crt_filter = !state.crt_filter;
-
-                        ctx.state.write(state).unwrap();
-                    }
-                }
-            }
-
-            let state: SettingsPanelState = ctx.state.read_cloned_or_default();
             let world: &mut World = ctx.process_context.get_mut().unwrap();
             let mut query = world.query::<&mut super::Camera>();
             let mut camera = query.iter_mut(world).next().expect("Expected one camera");
 
-            camera.custom_shader = if state.crt_filter {
-                Some(super::CrtShader::default().get_shader())
-            } else {
-                None
-            };
-
-            camera.pixel_aspect_ratio = if state.pixel_aspect_4_3 {
-                4.0 / 3.0
-            } else {
-                1.0
-            };
+            for msg in ctx.messenger.messages {
+                // Respond to click settings change messages
+                if let Some(msg) = msg.as_any().downcast_ref::<ButtonNotifyMessage>() {
+                    if msg.trigger_start() && msg.sender.ends_with("pixel_aspect") {
+                        if (camera.pixel_aspect_ratio - 1.0).abs() < f32::EPSILON {
+                            camera.pixel_aspect_ratio = 4.0 / 3.0;
+                        } else {
+                            camera.pixel_aspect_ratio = 1.0;
+                        }
+                    } else if msg.trigger_start() && msg.sender.ends_with("crt_filter") {
+                        if camera.custom_shader == None {
+                            camera.custom_shader = Some(super::CrtShader::default().get_shader())
+                        } else {
+                            camera.custom_shader = None;
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -1486,12 +1505,17 @@ mod ui {
         let SettingsPanelProps {
             cancel_notify_id,
             cancel_notify_message,
+            save_notify_id,
+            save_notify_message,
         } = ctx.props.read_cloned_or_default();
 
-        let SettingsPanelState {
-            crt_filter,
-            pixel_aspect_4_3,
-        } = ctx.state.read_cloned_or_default();
+        // Get the camera info from the world
+        let world: &mut World = ctx.process_context.get_mut().unwrap();
+        let mut query = world.query::<&super::Camera>();
+        let camera = query.iter_mut(world).next().expect("Expected one camera");
+        // Get the values for the checkboxes
+        let crt_filter = camera.custom_shader.is_some();
+        let pixel_aspect_4_3 = camera.pixel_aspect_ratio.abs() - 1.0 > f32::EPSILON;
 
         // Settings panel
         let panel_props = Props::new(ContentBoxItemLayout {
@@ -1559,9 +1583,8 @@ mod ui {
         })
         .with(GameButtonProps {
             text: "Save".into(),
-            // notify_id: id.to_owned(),
-            message_name: "settings".into(),
-            ..Default::default()
+            notify_id: save_notify_id,
+            message_name: save_notify_message,
         });
 
         // Container for buttons
