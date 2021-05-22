@@ -237,6 +237,7 @@ pub fn await_init(
     }
 }
 
+pub struct StartMenuMusicHandle(pub Sound);
 /// Position the camera on the start menu
 pub fn setup_start_menu(
     mut completed: Local<bool>,
@@ -245,6 +246,10 @@ pub fn setup_start_menu(
     current_level: Res<CurrentLevel>,
     mut map_layers: Query<(&LdtkMapLayer, &mut Visible)>,
     map_assets: Res<Assets<LdtkMap>>,
+    game_info: Res<GameInfo>,
+    asset_server: Res<AssetServer>,
+    mut sound_controller: SoundController,
+    mut commands: Commands,
 ) {
     // Run only once
     if *completed {
@@ -292,6 +297,17 @@ pub fn setup_start_menu(
         0,
     );
 
+    let sound_data = asset_server.load_cached(game_info.splash_screen.music.as_str());
+    let sound = sound_controller.create_sound(&sound_data);
+
+    // Play music on loop
+    sound_controller.play_sound_with_settings(
+        sound,
+        PlaySoundSettings::new().loop_start(LoopStart::Custom(0.0)),
+    );
+
+    commands.insert_resource(StartMenuMusicHandle(sound));
+
     // Mark completed so we don't run this system again
     if !*completed && hid_layers {
         *completed = true;
@@ -308,10 +324,15 @@ pub fn spawn_player_and_setup_level(
     current_level: Res<CurrentLevel>,
     mut sound_controller: SoundController,
     mut ui_tree: ResMut<UiTree>,
+    start_menu_music_handle: Res<StartMenuMusicHandle>,
 ) {
     if let Ok(map_handle) = map_query.single() {
         if let Some(map) = map_assets.get(map_handle) {
             debug!("Map loaded: spawning player");
+
+            // Stop the menu music
+            sound_controller.stop_sound(start_menu_music_handle.0);
+
             let level = &map
                 .project
                 .levels
