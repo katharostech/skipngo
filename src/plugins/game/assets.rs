@@ -55,6 +55,7 @@ pub struct GameInfo {
 pub struct SplashScreen {
     pub splash_image: SplashImage,
     pub background_level: String,
+    pub music: String,
 }
 
 /// The splash image to use for the game
