@@ -1,4 +1,3 @@
-use crate::EngineConfig;
 use bevy::prelude::*;
 
 use assets::*;

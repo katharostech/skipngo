@@ -175,7 +175,6 @@ pub fn await_init(
     game_info_assets: Res<Assets<GameInfo>>,
     asset_server: Res<AssetServer>,
     mut state: ResMut<State<GameState>>,
-    engine_config: Res<EngineConfig>,
     mut ui_tree: ResMut<UiTree>,
     #[cfg(not(wasm))] mut windows: ResMut<Windows>,
 ) {
@@ -190,12 +189,6 @@ pub fn await_init(
         commands.spawn().insert_bundle(CameraBundle {
             camera: Camera {
                 size: game_info.camera_size.clone(),
-                custom_shader: if engine_config.enable_crt {
-                    Some(CrtShader::default().get_shader())
-                } else {
-                    None
-                },
-                pixel_aspect_ratio: engine_config.pixel_aspect_ratio,
                 ..Default::default()
             },
             ..Default::default()

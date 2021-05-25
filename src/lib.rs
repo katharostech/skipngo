@@ -100,15 +100,6 @@ pub struct EngineConfig {
     /// Enable frame time diagnostics to the console
     #[cfg_attr(not(wasm), structopt(short = "d", long = "frame-time-diagnostics"))]
     frame_time_diagnostics: bool,
-    /// Enable CRT screen filter
-    #[cfg_attr(not(wasm), structopt(short = "C", long = "enable-crt"))]
-    enable_crt: bool,
-    /// Set the pixel aspect ratio
-    #[cfg_attr(
-        not(wasm),
-        structopt(short = "A", long = "pixel-aspect-ratio", default_value = "1.0")
-    )]
-    pixel_aspect_ratio: f32,
     /// Enable hot reloading game assets
     #[cfg_attr(not(wasm), structopt(short = "R", long = "hot-reload"))]
     hot_reload: bool,
@@ -146,12 +137,6 @@ impl EngineConfig {
             frame_time_diagnostics: parse_url_query_string(&asset_url, "frame_time_diagnostics")
                 .map(|x| x == "true")
                 .unwrap_or(false),
-            enable_crt: parse_url_query_string(&asset_url, "enable_crt")
-                .map(|x| x == "true")
-                .unwrap_or(false),
-            pixel_aspect_ratio: parse_url_query_string(&asset_url, "pixel_aspect_ratio")
-                .map(|x| x.parse().expect("Pixel aspect ratio not a number"))
-                .unwrap_or(1.0),
             // Hot reload is not supported on web yet
             hot_reload: false,
         }
