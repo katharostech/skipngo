@@ -20,10 +20,10 @@ build-web:
     cp wasm_resources/index.html target/wasm/index.html
     mkdir -p target/wasm
 
-build-release-web:
+build-release-web basepath='':
     cargo build --target wasm32-unknown-unknown --release
     wasm-bindgen --out-dir target/wasm-dist --no-typescript --target web target/wasm32-unknown-unknown/release/skipngo.wasm
-    cp wasm_resources/index.html target/wasm-dist/index.html
+    cat wasm_resources/index.html | sed "s/\$BASEPATH/$(printf {{basepath}} | sed 's/\//\\\//g')/g" > target/wasm-dist/index.html
 
 run *args:
     cargo run {{dev_features}} -- {{args}}
