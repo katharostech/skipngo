@@ -47,6 +47,7 @@ jobs:
 
   build-and-test-native:
     needs: check
+    if: ${{ github.event_name != 'pull_request'}}
     strategy:
       matrix:
         os: [ 'windows-latest', 'ubuntu-latest', 'macos-latest' ]
@@ -81,6 +82,7 @@ jobs:
 
   build-wasm:
     needs: check
+    if: ${{ github.event_name != 'pull_request'}}
     runs-on: ubuntu-latest
     env:
       # We have overrides for the optimization levels of debug builds in
@@ -114,7 +116,8 @@ jobs:
   #
 
   build-release-native:
-    # needs: check
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    needs: build-and-test-native
     strategy:
       matrix:
         os: [ 'windows-latest', 'ubuntu-latest', 'macos-latest' ]
