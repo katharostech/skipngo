@@ -17,7 +17,7 @@ build-release-cross-windows:
 build-web:
     cargo build --target wasm32-unknown-unknown
     wasm-bindgen --out-dir target/wasm --target web target/wasm32-unknown-unknown/debug/skipngo.wasm
-    cp wasm_resources/index.html target/wasm/index.html
+    cat wasm_resources/index.html | sed "s/\$BASEPATH//g" > target/wasm/index.html
     mkdir -p target/wasm
 
 build-release-web basepath='':
