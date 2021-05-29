@@ -54,6 +54,14 @@ jobs:
         toolchain: [ 'stable', 'nightly' ]
     continue-on-error: ${{ matrix.toolchain == 'nightly' }}
     runs-on: ${{ matrix.os }}
+    env:
+      # Undo the dev profile overrides inside of the Cargo.toml so that the
+      # cargo build uses the same settings as cargo test and doesn't have
+      # to re-compile all deps with a different profile
+      CARGO_PROFILE_DEV_OPT_LEVEL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      # Also just disable debug symbols for testing
+      CARGO_PROFILE_TEST_DEBUG: 0
     steps:
       - uses: actions/checkout@v2
 
@@ -76,7 +84,9 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           override: true
 
-      # No need to build first because the test command will build the crate
+      - name: Build
+        run: cargo build --verbose
+
       - name: Test
         run: cargo test --verbose
 
@@ -85,10 +95,9 @@ jobs:
     if: ${{ github.event_name != 'pull_request'}}
     runs-on: ubuntu-latest
     env:
-      # We have overrides for the optimization levels of debug builds in
-      # our Cargo.toml. This sets them back to normal to improve build times.
-      CARGO_PROFILE_DEV_DEBUG: true
       CARGO_PROFILE_DEV_OPT_LEVEL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
     steps:
       - uses: actions/checkout@v2
 

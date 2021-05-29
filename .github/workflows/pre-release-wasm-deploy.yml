@@ -1,3 +1,5 @@
+name: Publish Pre-Release WASM
+
 on:
   push:
     tags:        
