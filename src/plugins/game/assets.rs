@@ -56,7 +56,15 @@ pub struct SplashScreen {
     pub splash_image: SplashImage,
     pub background_level: String,
     pub music: String,
-    pub copyright: String,
+    pub copyright: CopyrightInfo,
+}
+
+#[derive(Deserialize, Clone, Serialize, Debug)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct CopyrightInfo {
+    pub text: String,
+    pub font: String,
 }
 
 /// The splash image to use for the game

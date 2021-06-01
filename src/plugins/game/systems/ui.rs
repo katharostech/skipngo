@@ -236,7 +236,7 @@ pub fn start_menu(mut ctx: WidgetContext) -> WidgetNode {
     });
 
     let copyright_props = Props::new(TextBoxProps {
-        text: game_info.splash_screen.copyright.clone(),
+        text: game_info.splash_screen.copyright.text.clone(),
         color: Color {
             r: 0.,
             g: 0.,
@@ -244,7 +244,7 @@ pub fn start_menu(mut ctx: WidgetContext) -> WidgetNode {
             a: 1.,
         },
         font: TextBoxFont {
-            name: game_info.ui_theme.default_font.clone(),
+            name: game_info.splash_screen.copyright.font.clone(),
             size: 1.0,
         },
         horizontal_align: TextBoxHorizontalAlign::Center,
@@ -320,6 +320,9 @@ fn use_game_button(ctx: &mut WidgetContext) {
     use_button_notified_state,
 )]
 fn game_button(mut ctx: WidgetContext) -> WidgetNode {
+    let world: &mut World = ctx.process_context.get_mut().unwrap();
+    let game_info = world.get_resource::<GameInfo>().unwrap();
+
     // Get our button state
     let ButtonProps {
         selected: hover,
@@ -357,7 +360,7 @@ fn game_button(mut ctx: WidgetContext) -> WidgetNode {
         horizontal_align: TextBoxHorizontalAlign::Center,
         vertical_align: TextBoxVerticalAlign::Middle,
         font: TextBoxFont {
-            name: "fonts/cozette.bdf".to_string(),
+            name: game_info.ui_theme.default_font.clone(),
             size: 1.,
         },
         transform: Transform {
