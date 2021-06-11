@@ -192,8 +192,8 @@ pub fn spawn_player_and_setup_level(
             let character_handle: Handle<Character> =
                 asset_server.load_cached(game_info.player_character.as_str());
 
-            let character_image_handle = asset_server
-                .load_cached(format!("{}#atlas", game_info.player_character).as_str());
+            let character_image_handle =
+                asset_server.load_cached(format!("{}#atlas", game_info.player_character).as_str());
             let character_spritesheet_handle = asset_server
                 .load_cached(format!("{}#spritesheet", game_info.player_character).as_str());
 

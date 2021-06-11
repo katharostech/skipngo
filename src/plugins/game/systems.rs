@@ -15,7 +15,7 @@ mod pause_menu;
 mod gameplay;
 use gameplay::{
     animate_sprites, camera_follow_system, change_level, control_character,
-    finish_spawning_character, keyboard_control_input, touch_control_input,
+    finish_spawning_character, keyboard_control_input, spawn_hud, touch_control_input,
 };
 
 /// The game states
@@ -103,6 +103,7 @@ pub fn add_systems(app: &mut AppBuilder) {
                         .system(),
                     ),
                 )
+                .with_system(spawn_hud.system())
                 .with_system(finish_spawning_character.system().label("finish_spawn"))
                 .with_system(
                     touch_control_input

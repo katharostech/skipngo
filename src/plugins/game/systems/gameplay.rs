@@ -1,8 +1,28 @@
+use bevy_retro::prelude::raui::core::make_widget;
+
 use super::*;
+
+mod hud;
+
+/// The amount of health an object that can die or be destroyed has
+pub struct Health {
+    /// The current health of the entity
+    pub current: u32,
+    /// The maximum amount of health the entity can have
+    pub max: u32,
+}
 
 //
 // Game play systems
 //
+
+pub fn spawn_hud(state: Res<State<GameState>>, mut ui: ResMut<UiTree>) {
+    // If we have just changed to gameplay state
+    if state.is_changed() {
+        // Spawn the HUD
+        *ui = UiTree(make_widget!(hud::hud).into());
+    }
+}
 
 pub fn touch_control_input(
     mut tracked_touch: Local<Option<u64>>,
@@ -105,7 +125,10 @@ pub fn finish_spawning_character(
         if let Some(character) = character_assets.get(character_handle) {
             *image_handle = character.sprite_image.clone();
             *sprite_sheet_handle = character.sprite_sheet.clone();
-            commands.entity(ent).insert(CharacterLoaded);
+            commands.entity(ent).insert(CharacterLoaded).insert(Health {
+                max: character.max_health,
+                current: character.max_health,
+            });
         }
     }
 }
@@ -606,10 +629,12 @@ pub fn change_level(
                         .levels
                         .iter()
                         .find(|x| x.identifier == to_level_id)
-                        .expect(&format!(
-                            "Level `{}` does not exist. Could not teleport there.",
-                            to_level_id
-                        ));
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Level `{}` does not exist. Could not teleport there.",
+                                to_level_id
+                            )
+                        });
 
                     // Get the spawn point we will be teleporting to
                     let to_entrance = to_level
@@ -625,10 +650,12 @@ pub fn change_level(
                                     })
                             })
                         })
-                        .expect(&format!(
-                            "Could not find entrance `{}` in level `{}` to teleport to",
-                            to_entrance_id, to_level_id
-                        ));
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Could not find entrance `{}` in level `{}` to teleport to",
+                                to_entrance_id, to_level_id
+                            )
+                        });
 
                     // Set the current level to the new level
                     *current_level = CurrentLevel(to_level_id.into());

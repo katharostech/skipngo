@@ -86,6 +86,25 @@ pub struct UiTheme {
     pub button_up: UiBoxImage,
     pub button_down: UiBoxImage,
     pub checkbox: UiCheckboxImages,
+    pub hud: UiHud,
+}
+
+/// In-game HUD theme
+#[derive(Deserialize, Clone, Serialize, Debug)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct UiHud {
+    pub health_background: SizedImage,
+    pub full_heart: SizedImage,
+    pub half_heart: SizedImage,
+}
+
+#[derive(Deserialize, Clone, Serialize, Debug)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
+pub struct SizedImage {
+    pub image: String,
+    pub size: (u32, u32),
 }
 
 /// The theme for a checkbox
@@ -213,6 +232,7 @@ async fn load_character<'a, 'b>(
     load_context.set_default_asset(
         LoadedAsset::new(Character {
             name: character.name,
+            max_health: character.max_health,
             sprite_sheet_info: character.sprite_sheet,
             collision_shape: collision_image_handle,
             actions: character.actions,
