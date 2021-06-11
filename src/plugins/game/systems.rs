@@ -3,6 +3,7 @@ use bevy::{
     ecs::{component::ComponentDescriptor, schedule::ShouldRun},
     prelude::*,
     utils::HashSet,
+    window::WindowMode,
 };
 use bevy_retro::{prelude::*, ui::raui::prelude::widget};
 use kira::parameter::tween::Tween;
@@ -41,6 +42,7 @@ pub fn add_systems(app: &mut AppBuilder) {
         .register_component(ComponentDescriptor::new::<gameplay::CharacterLoaded>(
             bevy::ecs::component::StorageType::SparseSet,
         ))
+        .add_system(switch_fullscreen.system())
         // Game init state
         .add_state(GameState::Init)
         .add_system_set(
@@ -142,6 +144,17 @@ pub fn add_systems(app: &mut AppBuilder) {
                 )
                 .with_system(pause_menu::handle_pause_menu.system()),
         );
+}
+
+fn switch_fullscreen(mut windows: ResMut<Windows>, keyboard_input: Res<Input<KeyCode>>) {
+    if keyboard_input.just_pressed(KeyCode::F11) {
+        if let Some(window) = windows.get_primary_mut() {
+            window.set_mode(match window.mode() {
+                WindowMode::BorderlessFullscreen => WindowMode::Windowed,
+                _ => WindowMode::BorderlessFullscreen,
+            });
+        }
+    }
 }
 
 mod ui_utils {
