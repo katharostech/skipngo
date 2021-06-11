@@ -57,7 +57,7 @@ pub fn keyboard_control_input(
     mut state: ResMut<State<GameState>>,
 ) {
     if keyboard_input.pressed(KeyCode::Escape) && !*pause_was_pressed {
-        info!("Pausing game");
+        debug!("Pausing game");
         state
             .push(GameState::Paused)
             .expect("Could not transition to paused state");
@@ -434,7 +434,36 @@ pub fn camera_follow_system(
     }
 }
 
+/// Helper macro to unwrap an option or return the function
+macro_rules! unwrap_or_return {
+    ($e:expr) => {
+        if let Some(e) = $e {
+            e
+        } else {
+            return;
+        }
+    };
+}
+
+/// Enumerates different states the entrance transition logic can be in
+#[derive(PartialEq, Eq)]
+pub enum EntranceStatus {
+    /// Totally outside of any entrance
+    Outside,
+    /// Teleporting and waiting to reach the other entrance
+    TeleportingTo { entrance_id: String },
+    /// Waiting for the player to walk out of the entrance after having teleported
+    AwatingLeave,
+}
+
+impl Default for EntranceStatus {
+    fn default() -> Self {
+        EntranceStatus::Outside
+    }
+}
+
 pub fn change_level(
+    mut status: Local<EntranceStatus>,
     mut commands: Commands,
     mut cameras: Query<&mut Camera>,
     mut characters: Query<(Entity, &Handle<Character>, &Sprite)>,
@@ -453,16 +482,8 @@ pub fn change_level(
     world_positions.sync_world_positions(&mut scene_graph);
 
     // Get the map
-    let map_handle = if let Some(map) = maps.iter().next() {
-        map
-    } else {
-        return;
-    };
-    let map = if let Some(map) = map_assets.get(map_handle) {
-        map
-    } else {
-        return;
-    };
+    let map_handle = unwrap_or_return!(maps.iter().next());
+    let map = unwrap_or_return!(map_assets.get(map_handle));
 
     // Get the current map level
     let level = map
@@ -470,30 +491,23 @@ pub fn change_level(
         .levels
         .iter()
         .find(|x| x.identifier == **current_level)
-        .unwrap();
+        .expect("Current level not found");
 
-    // Loop through the characters
-    for (character_ent, character_handle, character_sprite) in characters.iter_mut() {
-        let character = if let Some(character) = character_assets.get(character_handle) {
-            character
-        } else {
-            continue;
-        };
-        let character_collision = if let Some(image) = image_assets.get(&character.collision_shape)
-        {
-            image
-        } else {
-            continue;
-        };
+    // Detect character collision
+    if let Ok((character_ent, character_handle, character_sprite)) = characters.single_mut() {
+        let character = unwrap_or_return!(character_assets.get(character_handle));
+        let character_collision = unwrap_or_return!(image_assets.get(&character.collision_shape));
 
         // For every entity layer in the level
         for layer in level
             .layer_instances
             .as_ref()
-            .unwrap()
+            .expect("Level has no layers")
             .iter()
             .filter(|x| x.__type == "Entities")
         {
+            let mut has_collided = false;
+
             // For every entrance entity
             for entrance in layer
                 .entity_instances
@@ -523,25 +537,68 @@ pub fn change_level(
                     ),
                 };
 
-                // If we have collided with the entrance
+                // If we have collided with an entrance
                 if pixels_collide_with_bounding_box(character_collider, entrance_bounds) {
+                    has_collided = true;
+
+                    // Get the entrance id
+                    let entrance_id = entrance
+                        .field_instances
+                        .iter()
+                        .find(|x| x.__identifier == "id")
+                        .expect("Could not find `id` field of entrance")
+                        .__value
+                        .as_str()
+                        .expect("`id` field of entrance is null");
+
                     // Figure out where to teleport to
                     let to_level_id = entrance
                         .field_instances
                         .iter()
                         .find(|x| x.__identifier == "to")
-                        .unwrap()
+                        .expect("Entrance missing `to` property")
                         .__value
                         .as_str()
-                        .unwrap();
-                    let to_spawn_point = entrance
+                        .expect("Entrance `to` property is null");
+                    let to_entrance_id = entrance
                         .field_instances
                         .iter()
                         .find(|x| x.__identifier == "spawn_at")
-                        .unwrap()
+                        .expect("Entrance missing `spawn_at` value")
                         .__value
                         .as_str()
-                        .unwrap();
+                        .expect("Entrance `spawn_at` property is null");
+
+                    match &*status {
+                        // If we are in the middle of teleporting to an entrance
+                        EntranceStatus::TeleportingTo {
+                            entrance_id: target_entrance_id,
+                        } => {
+                            // If we have collided with the entrance we are trying to teleport to
+                            if entrance_id == target_entrance_id.as_str() {
+                                // Transition into an awaiting leave state
+                                *status = EntranceStatus::AwatingLeave;
+                            }
+
+                            // And skip all tasks below
+                            return;
+                        }
+                        // If we are waiting to leave an entrance we have just gotten to, we just
+                        // skip everything below. We don't respond to collision with the entrance
+                        // until we leave the entrance.
+                        EntranceStatus::AwatingLeave => {
+                            return;
+                        }
+
+                        // We are outside of an entrance and walking into it for the first time
+                        EntranceStatus::Outside => {
+                            // Move to teleporting state and continue on with the logic below to
+                            // teleport to the target entrance
+                            *status = EntranceStatus::TeleportingTo {
+                                entrance_id: to_entrance_id.into(),
+                            };
+                        }
+                    }
 
                     // Get the level that we will be teleporting to
                     let to_level = map
@@ -549,23 +606,29 @@ pub fn change_level(
                         .levels
                         .iter()
                         .find(|x| x.identifier == to_level_id)
-                        .unwrap();
+                        .expect(&format!(
+                            "Level `{}` does not exist. Could not teleport there.",
+                            to_level_id
+                        ));
 
                     // Get the spawn point we will be teleporting to
-                    let spawn_point = to_level
+                    let to_entrance = to_level
                         .layer_instances
                         .as_ref()
-                        .unwrap()
+                        .expect("Teleport `to` level does not have any layers")
                         .iter()
                         .find_map(|x| {
                             x.entity_instances.iter().find(|x| {
-                                x.__identifier == "SpawnPoint"
+                                x.__identifier == "Entrance"
                                     && x.field_instances.iter().any(|x| {
-                                        x.__identifier == "name" && x.__value == to_spawn_point
+                                        x.__identifier == "id" && x.__value == to_entrance_id
                                     })
                             })
                         })
-                        .unwrap();
+                        .expect(&format!(
+                            "Could not find entrance `{}` in level `{}` to teleport to",
+                            to_entrance_id, to_level_id
+                        ));
 
                     // Set the current level to the new level
                     *current_level = CurrentLevel(to_level_id.into());
@@ -575,7 +638,7 @@ pub fn change_level(
                         .field_instances
                         .iter()
                         .find(|x| x.__identifier == "music")
-                        .unwrap();
+                        .expect("Level missing field `music`");
 
                     // Create helper to stop the music that is already playing
                     let stop_music = |controller: &mut SoundController, sound| {
@@ -669,13 +732,26 @@ pub fn change_level(
                     // Get the character's position
                     let mut character_pos = world_positions
                         .get_local_position_mut(character_ent)
-                        .unwrap();
+                        .expect("Character missing position component");
 
                     *character_pos = Position::new(
-                        to_level.world_x + spawn_point.px[0],
-                        to_level.world_y + spawn_point.px[1],
-                        level.layer_instances.as_ref().unwrap().len() as i32 * 2,
+                        to_level.world_x + to_entrance.px[0] + to_entrance.width / 2,
+                        to_level.world_y + to_entrance.px[1] + to_entrance.height / 2,
+                        level
+                            .layer_instances
+                            .as_ref()
+                            .expect("Level does not have any layers")
+                            .len() as i32
+                            * 2,
                     );
+                }
+            }
+
+            if !has_collided {
+                // If we are waiting to leave an entrance
+                if *status == EntranceStatus::AwatingLeave {
+                    // We're outside again!
+                    *status = EntranceStatus::Outside;
                 }
             }
         }

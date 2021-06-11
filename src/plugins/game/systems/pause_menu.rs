@@ -13,13 +13,13 @@ pub fn handle_pause_menu(
     mut state: ResMut<State<GameState>>,
 ) {
     if !*pause_menu_visible {
-        info!("Showing pause menu");
+        debug!("Showing pause menu");
         *pause_menu_visible = true;
         *ui = UiTree(make_widget!(ui::pause_menu).into());
     }
 
     if keyboard_input.just_pressed(KeyCode::Escape) {
-        info!("Unpausing and hiding pause menu");
+        debug!("Unpausing and hiding pause menu");
         state.pop().expect("Could not transition game state");
         *ui = UiTree(WidgetNode::None);
         *pause_menu_visible = false;
