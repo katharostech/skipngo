@@ -5,7 +5,7 @@ use bevy::{
     utils::HashSet,
     window::WindowMode,
 };
-use bevy_retro::{prelude::*, ui::raui::prelude::widget};
+use bevy_retrograde::{prelude::*, ui::raui::prelude::widget};
 use kira::parameter::tween::Tween;
 
 use super::*;
@@ -159,7 +159,7 @@ fn switch_fullscreen(mut windows: ResMut<Windows>, keyboard_input: Res<Input<Key
 
 mod ui_utils {
     use crate::plugins::game::assets::GameInfo;
-    use bevy_retro::ui::raui::prelude::*;
+    use bevy_retrograde::ui::raui::prelude::*;
 
     pub fn get_ui_theme(game_info: &GameInfo) -> ThemeProps {
         let mut theme = ThemeProps::default();
@@ -228,7 +228,7 @@ mod ui_utils {
             ThemedTextMaterial {
                 font: TextBoxFont {
                     name: game_info.ui_theme.default_font.clone(),
-                    // Font's in Bevy Retro don't really have sizes so we can just set this to
+                    // Font's in Bevy Retrograde don't really have sizes so we can just set this to
                     // one
                     size: 1.0,
                 },

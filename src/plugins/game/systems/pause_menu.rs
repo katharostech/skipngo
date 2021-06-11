@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_retro::prelude::{
+use bevy_retrograde::prelude::{
     raui::{core::make_widget, prelude::WidgetNode},
     UiTree,
 };
@@ -28,7 +28,7 @@ pub fn handle_pause_menu(
 
 mod ui {
     use bevy::prelude::World;
-    use bevy_retro::ui::raui::prelude::*;
+    use bevy_retrograde::ui::raui::prelude::*;
 
     use crate::plugins::game::{assets::GameInfo, systems::ui_utils::get_ui_theme};
 

@@ -5,7 +5,7 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
 };
-use bevy_retro::prelude::{
+use bevy_retrograde::prelude::{
     ui::raui::prelude::{Prefab, PropsData},
     *,
 };
@@ -127,7 +127,7 @@ pub struct UiBoxImage {
     pub only_frame: bool,
 }
 
-/// A serializable version of the bevy_retro [`CameraSize`]
+/// A serializable version of the bevy_retrograde [`CameraSize`]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(remote = "CameraSize")]
 #[serde(rename_all = "kebab-case")]

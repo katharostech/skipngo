@@ -7,7 +7,7 @@ use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
 };
-use bevy_retro::prelude::*;
+use bevy_retrograde::prelude::*;
 
 #[cfg(not(wasm))]
 use structopt::StructOpt;
@@ -42,7 +42,7 @@ pub fn run() {
         .insert_resource(engine_config.clone())
         // Add the logging config
         .insert_resource(log_config)
-        // Install Bevy Retro
+        // Install Bevy Retrograde
         .add_plugins(RetroPlugins)
         // Add our SkipnGo plugins
         .add_plugins(plugins::SkipnGoPlugins);
