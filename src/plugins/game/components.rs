@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use bevy::{prelude::*, reflect::TypeUuid};
-use bevy_retro::prelude::*;
+use bevy_retrograde::prelude::*;
 
 //
 // Game and level components
@@ -26,6 +26,7 @@ pub struct CurrentLevelMusic {
 #[uuid = "9fa5febb-1a7b-4864-9534-2d5df8df82f4"]
 pub struct Character {
     pub name: String,
+    pub max_health: u32,
     pub sprite_sheet_info: CharacterSpriteSheet,
     pub actions: CharacterActions,
     pub walk_speed: u32,
@@ -39,6 +40,7 @@ pub struct Character {
 #[serde(deny_unknown_fields)]
 pub struct CharacterYmlData {
     pub name: String,
+    pub max_health: u32,
     pub sprite_sheet: CharacterSpriteSheet,
     pub actions: CharacterActions,
     pub walk_speed: u32,

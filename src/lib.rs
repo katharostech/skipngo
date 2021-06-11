@@ -5,10 +5,9 @@
 use bevy::{
     asset::AssetServerSettings,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    ecs::schedule::ReportExecutionOrderAmbiguities,
     prelude::*,
 };
-use bevy_retro::prelude::*;
+use bevy_retrograde::prelude::*;
 
 #[cfg(not(wasm))]
 use structopt::StructOpt;
@@ -37,12 +36,13 @@ pub fn run() {
         .insert_resource(AssetServerSettings {
             asset_folder: engine_config.asset_path.clone(),
         })
-        .insert_resource(ReportExecutionOrderAmbiguities)
+        // For now, order execution ambiguities are being more annoying than useful
+        // .insert_resource(ReportExecutionOrderAmbiguities)
         // Add engine configuration
         .insert_resource(engine_config.clone())
         // Add the logging config
         .insert_resource(log_config)
-        // Install Bevy Retro
+        // Install Bevy Retrograde
         .add_plugins(RetroPlugins)
         // Add our SkipnGo plugins
         .add_plugins(plugins::SkipnGoPlugins);

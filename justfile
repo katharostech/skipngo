@@ -1,7 +1,5 @@
-dev_features:='--features bevy/dynamic'
-
 build:
-    cargo build {{dev_features}}
+    cargo build
 
 build-release:
     cargo build --release
@@ -26,8 +24,8 @@ build-release-web basepath='':
     cat wasm_resources/index.html | sed "s/\$BASEPATH/$(printf {{basepath}} | sed 's/\//\\\//g')/g" > target/wasm-dist/index.html
 
 run *args:
-    cargo run {{dev_features}} -- {{args}}
+    cargo run -- {{args}}
 
-run-web: build-web
-    @echo "Debug link: http://localhost:4000?RUST_LOG=debug"
-    basic-http-server -x target/wasm
+run-web port='4000' host='127.0.0.1': build-web
+    @echo "Debug link: http://{{host}}:{{port}}?RUST_LOG=debug"
+    basic-http-server -a '{{host}}:{{port}}' -x target/wasm

@@ -1,7 +1,7 @@
 use bevy::prelude::World;
-use bevy_retro::ui::raui::prelude::*;
+use bevy_retrograde::ui::raui::prelude::*;
 
-use super::{CurrentLevel, GameInfo, GameState, State};
+use super::{ui_utils::get_ui_theme, CurrentLevel, GameInfo, GameState, State};
 
 fn use_start_menu(ctx: &mut WidgetContext) {
     ctx.life_cycle.change(|ctx| {
@@ -99,85 +99,7 @@ pub fn start_menu(mut ctx: WidgetContext) -> WidgetNode {
     // Create shared props containing the theme
     let shared_props = Props::default()
         // Add the theme properties
-        .with({
-            let mut theme = ThemeProps::default();
-
-            theme.content_backgrounds.insert(
-                String::from("panel"),
-                ThemedImageMaterial::Image(ImageBoxImage {
-                    id: game_info.ui_theme.panel.image.clone(),
-                    scaling: ImageBoxImageScaling::Frame(
-                        (
-                            game_info.ui_theme.panel.border_size as f32,
-                            game_info.ui_theme.panel.only_frame,
-                        )
-                            .into(),
-                    ),
-                    ..Default::default()
-                }),
-            );
-
-            theme.content_backgrounds.insert(
-                String::from("button-up"),
-                ThemedImageMaterial::Image(ImageBoxImage {
-                    id: game_info.ui_theme.button_up.image.clone(),
-                    scaling: ImageBoxImageScaling::Frame(
-                        (
-                            game_info.ui_theme.button_up.border_size as f32,
-                            game_info.ui_theme.button_up.only_frame,
-                        )
-                            .into(),
-                    ),
-                    ..Default::default()
-                }),
-            );
-
-            theme.content_backgrounds.insert(
-                String::from("button-down"),
-                ThemedImageMaterial::Image(ImageBoxImage {
-                    id: game_info.ui_theme.button_down.image.clone(),
-                    scaling: ImageBoxImageScaling::Frame(
-                        (
-                            game_info.ui_theme.button_down.border_size as f32,
-                            game_info.ui_theme.button_down.only_frame,
-                        )
-                            .into(),
-                    ),
-                    ..Default::default()
-                }),
-            );
-
-            theme.switch_variants.insert(
-                "checkbox".to_owned(),
-                ThemedSwitchMaterial {
-                    on: ThemedImageMaterial::Image(ImageBoxImage {
-                        id: game_info.ui_theme.checkbox.checked.clone(),
-                        ..Default::default()
-                    }),
-                    off: ThemedImageMaterial::Image(ImageBoxImage {
-                        id: game_info.ui_theme.checkbox.unchecked.clone(),
-                        ..Default::default()
-                    }),
-                },
-            );
-
-            theme.text_variants.insert(
-                String::new(),
-                ThemedTextMaterial {
-                    font: TextBoxFont {
-                        name: game_info.ui_theme.default_font.clone(),
-                        // Font's in Bevy Retro don't really have sizes so we can just set this to
-                        // one
-                        size: 1.0,
-                    },
-                    ..Default::default()
-                },
-            );
-
-            theme.icons_level_sizes = vec![8., 12., 16.];
-
-            theme
-        })
+        .with(get_ui_theme(game_info))
         .with(game_info.clone());
 
     let vertical_box_props = VerticalBoxProps {
