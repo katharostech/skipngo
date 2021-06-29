@@ -1,3 +1,8 @@
+use bevy_retrograde::{
+    core::image::{DynamicImage, GenericImageView},
+    prelude::rapier_plugin::rapier::prelude::IntegrationParameters,
+};
+
 use super::*;
 
 mod start_menu_ui;
@@ -14,6 +19,7 @@ pub fn await_init(
     mut state: ResMut<State<GameState>>,
     mut ui_tree: ResMut<UiTree>,
     #[cfg(not(wasm))] mut windows: ResMut<Windows>,
+    mut physics_params: ResMut<IntegrationParameters>,
 ) {
     debug!("Awaiting game info load...");
     let game_info: Handle<GameInfo> = asset_server.load_cached("default.game.yaml");
@@ -21,6 +27,17 @@ pub fn await_init(
     // Spawn the map and camera once the game info loads
     if let Some(game_info) = game_info_assets.get(game_info) {
         debug!("Game info loaded: spawning camera and map");
+
+        // Tweak the physics parameters
+        *physics_params = IntegrationParameters {
+            // Adjust for a "16 pixels equals 1 meter" scale
+            erp: 0.1,
+            allowed_linear_error: 0.05,
+            prediction_distance: 1.,
+            max_linear_correction: 3.,
+            ..(*physics_params)
+        };
+        commands.insert_resource(PhysicsSteps::variable_timestep());
 
         // Spawn the camera
         commands.spawn().insert_bundle(CameraBundle {
@@ -67,11 +84,208 @@ pub fn await_init(
     }
 }
 
+pub struct LdtkMapLayerFinishedLoadingCollisions;
+/// Get any maps that have not had their tile collisions spawned yet and spawn them
+pub fn update_map_collisions(
+    mut commands: Commands,
+    map_layers: Query<
+        (Entity, &LdtkMapLayer, &Handle<Image>),
+        Without<LdtkMapLayerFinishedLoadingCollisions>,
+    >,
+    image_assets: Res<Assets<Image>>,
+) {
+    // Spawn collision shapes for the collision layers
+    for (layer_ent, map_layer, image_handle) in map_layers.iter() {
+        // Skip non-collision layers
+        if !map_layer
+            .layer_instance
+            .__identifier
+            .to_lowercase()
+            .contains("collision")
+        {
+            // Mark this layer as loaded so we don't check it again
+            commands
+                .entity(layer_ent)
+                .insert(LdtkMapLayerFinishedLoadingCollisions);
+            continue;
+        }
+
+        // Get the layer image
+        let image = if let Some(image) = image_assets.get(image_handle) {
+            image
+        } else {
+            continue;
+        };
+
+        // Get the tile size of the map
+        let tile_size = map_layer.layer_instance.__grid_size as u32;
+
+        let mut layer_commands = commands.entity(layer_ent);
+
+        // For every tile grid
+        for tile_x in 0u32..map_layer.layer_instance.__c_wid as u32 {
+            for tile_y in 0u32..map_layer.layer_instance.__c_hei as u32 {
+                // Get the tile image
+                let tile_img = image
+                    .view(tile_x * tile_size, tile_y * tile_size, tile_size, tile_size)
+                    .to_image();
+
+                // Try to generate a convex collision mesh from the tile
+                let mesh = create_convex_collider(
+                    DynamicImage::ImageRgba8(tile_img.clone()),
+                    &TesselatedColliderConfig {
+                        vertice_separation: 1.,
+                        ..Default::default()
+                    },
+                );
+
+                // If mesh generation was successful ( wouldn't be fore empty tiles, etc. )
+                if let Some(mesh) = mesh {
+                    // Spawn a collider as a child of the map layer
+                    layer_commands.with_children(|layer| {
+                        layer.spawn().insert_bundle((
+                            mesh,
+                            Transform::from_xyz(
+                                (tile_x * tile_size + tile_size / 2) as f32,
+                                (tile_y * tile_size + tile_size / 2) as f32,
+                                0.,
+                            ),
+                            GlobalTransform::default(),
+                        ));
+                    });
+                }
+            }
+        }
+
+        layer_commands
+            // Make layer a static body
+            .insert(RigidBody::Static)
+            // Mark as loaded
+            .insert(LdtkMapLayerFinishedLoadingCollisions);
+    }
+}
+
+pub struct LdtkMapEntrancesLoaded;
+pub fn update_map_entrances(
+    mut commands: Commands,
+    maps: Query<(Entity, &Handle<LdtkMap>), Without<LdtkMapEntrancesLoaded>>,
+    map_assets: Res<Assets<LdtkMap>>,
+) {
+    for (ent, map_handle) in maps.iter() {
+        let map = if let Some(map) = map_assets.get(map_handle) {
+            map
+        } else {
+            continue;
+        };
+
+        let mut map_commands = commands.entity(ent);
+
+        for level in &map.project.levels {
+            for layer in level
+                .layer_instances
+                .as_ref()
+                .expect("Map has no layers")
+                .iter()
+                .filter(|x| x.__type == "Entities")
+            {
+                // Spawn collision sensors for the entrances
+                for entrance in layer
+                    .entity_instances
+                    .iter()
+                    .filter(|x| x.__identifier == "Entrance")
+                {
+                    map_commands.with_children(|map| {
+                        map.spawn_bundle((
+                            Entrance {
+                                map_handle: map_handle.clone(),
+                                level: level.identifier.clone(),
+                                id: entrance
+                                    .field_instances
+                                    .iter()
+                                    .find(|x| x.__identifier == "id")
+                                    .expect("Could not find entrance `id` field")
+                                    .__value
+                                    .as_str()
+                                    .expect("Entrance `id` field is not a string")
+                                    .into(),
+                                to_level: entrance
+                                    .field_instances
+                                    .iter()
+                                    .find(|x| x.__identifier == "to")
+                                    .expect("Could not find entrance `to` field")
+                                    .__value
+                                    .as_str()
+                                    .expect("Entrance `to` field is not a string")
+                                    .into(),
+                                spawn_at: entrance
+                                    .field_instances
+                                    .iter()
+                                    .find(|x| x.__identifier == "spawn_at")
+                                    .expect("Could not find entrance `spawn_at` field")
+                                    .__value
+                                    .as_str()
+                                    .expect("Entrance `spawn_at` field is not a string")
+                                    .into(),
+                            },
+                            CollisionShape::Cuboid {
+                                half_extends: Vec3::new(
+                                    entrance.width as f32 / 2.0,
+                                    entrance.height as f32 / 2.0,
+                                    0.,
+                                ),
+                                border_radius: None,
+                            },
+                            RigidBody::Sensor,
+                            Transform::from_xyz(
+                                (level.world_x
+                                    + layer.__px_total_offset_x
+                                    + entrance.px[0]
+                                    + entrance.width / 2) as f32,
+                                (level.world_y
+                                    + layer.__px_total_offset_y
+                                    + entrance.px[1]
+                                    + entrance.height / 2) as f32,
+                                100.,
+                            ),
+                            GlobalTransform::default(),
+                        ));
+                    });
+                }
+            }
+        }
+
+        map_commands.insert(LdtkMapEntrancesLoaded);
+    }
+}
+pub fn reload_changed_map_entrances(
+    mut commands: Commands,
+    maps: Query<(Entity, &Handle<LdtkMap>)>,
+    entrances: Query<(Entity, &Entrance)>,
+    mut events: EventReader<AssetEvent<LdtkMap>>,
+) {
+    for event in events.iter() {
+        if let AssetEvent::Modified { handle } = event {
+            // Remove the `LdtkMapEntrancesLoaded` flag from the map
+            for (ent, map) in maps.iter() {
+                if map == handle {
+                    commands.entity(ent).remove::<LdtkMapEntrancesLoaded>();
+                }
+            }
+            // Despawn all entrances for that map
+            for (ent, entrance) in entrances.iter() {
+                if &entrance.map_handle == handle {
+                    commands.entity(ent).despawn();
+                }
+            }
+        }
+    }
+}
+
 pub struct StartMenuMusicHandle(pub Sound);
 /// Position the camera on the start menu
 pub fn setup_start_menu(
     mut completed: Local<bool>,
-    mut cameras: Query<&mut Position, With<Camera>>,
+    mut cameras: Query<&mut Transform, With<Camera>>,
     mut maps_query: Query<&Handle<LdtkMap>>,
     current_level: Res<CurrentLevel>,
     mut map_layers: Query<(&LdtkMapLayer, &mut Visible)>,
@@ -87,7 +301,7 @@ pub fn setup_start_menu(
     }
 
     // Get our camera and map information
-    let mut camera_pos = if let Ok(pos) = cameras.single_mut() {
+    let mut camera_transform = if let Ok(pos) = cameras.single_mut() {
         pos
     } else {
         return;
@@ -121,10 +335,10 @@ pub fn setup_start_menu(
     }
 
     // Center the camera on the map level
-    *camera_pos = Position::new(
-        level.world_x + level.px_wid / 2,
-        level.world_y + level.px_hei / 2,
-        0,
+    *camera_transform = Transform::from_xyz(
+        level.world_x as f32 + level.px_wid as f32 / 2.,
+        level.world_y as f32 + level.px_hei as f32 / 2.,
+        0.,
     );
 
     let sound_data = asset_server.load_cached(game_info.splash_screen.music.as_str());
@@ -198,18 +412,22 @@ pub fn spawn_player_and_setup_level(
                 .load_cached(format!("{}#spritesheet", game_info.player_character).as_str());
 
             // Layers are 2 units away from each-other, so put the player at the top
-            let player_z = level.layer_instances.as_ref().unwrap().len() as i32 * 2;
+            let player_z = level.layer_instances.as_ref().unwrap().len() as f32 * 2.0;
 
             // Spawn the player
             commands.spawn().insert_bundle(CharacterBundle {
                 character: character_handle,
                 sprite_bundle: SpriteBundle {
                     image: character_image_handle,
-                    position: Position::new(
-                        player_start.px[0] + level.world_x,
-                        player_start.px[1] + level.world_y,
+                    transform: Transform::from_xyz(
+                        player_start.px[0] as f32 + level.world_x as f32,
+                        player_start.px[1] as f32 + level.world_y as f32,
                         player_z,
                     ),
+                    sprite: Sprite {
+                        pixel_perfect: false,
+                        ..Default::default()
+                    },
                     ..Default::default()
                 },
                 sprite_sheet: character_spritesheet_handle,

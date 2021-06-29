@@ -17,7 +17,7 @@ categories = [
 
 [dependencies]
 bevy = { version = "*", default-features = false }
-bevy_retrograde = { version = "0.1", features = ["ldtk"] }
+bevy_retrograde = { git = "https://github.com/katharostech/bevy_retrograde.git", features = ["ldtk"] }
 serde_yaml = "0.8.17"
 serde = "1.0.124"
 thiserror = "1.0.24"
@@ -36,13 +36,14 @@ cfg_aliases = "0.1.1"
 # Enable optimizations for dependencies but not for our code
 [profile.dev.package."*"]
 opt-level = 3
+debug = false
 
-# Enable a small amount of optimization for our code
 [profile.dev]
-opt-level = 1
+opt-level = 0
 
 [profile.release]
 lto = true
+codegen-units = 1 # Improves physics performance for release builds
 
 [patch.crates-io]
 winit = { git = "https://github.com/katharostech/winit", branch = "web-sys-touch-events" }

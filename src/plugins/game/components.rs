@@ -29,7 +29,7 @@ pub struct Character {
     pub max_health: u32,
     pub sprite_sheet_info: CharacterSpriteSheet,
     pub actions: CharacterActions,
-    pub walk_speed: u32,
+    pub walk_speed: f32,
     pub sprite_image: Handle<Image>,
     pub sprite_sheet: Handle<SpriteSheet>,
     pub collision_shape: Handle<Image>,
@@ -43,7 +43,7 @@ pub struct CharacterYmlData {
     pub max_health: u32,
     pub sprite_sheet: CharacterSpriteSheet,
     pub actions: CharacterActions,
-    pub walk_speed: u32,
+    pub walk_speed: f32,
     pub collision_shape: String,
 }
 
@@ -126,4 +126,23 @@ pub struct CharacterBundle {
     #[bundle]
     pub sprite_bundle: SpriteBundle,
     pub sprite_sheet: Handle<SpriteSheet>,
+}
+
+//
+// Map entities
+//
+
+/// An entrance on the map to another part of the map
+#[derive(Debug, Clone)]
+pub struct Entrance {
+    /// A handle to the map that this entrance is for
+    pub map_handle: Handle<LdtkMap>,
+    /// A unique identifier for the entrance
+    pub id: String,
+    /// The level that this entrance is found in
+    pub level: String,
+    /// The map level that the entrance goes to
+    pub to_level: String,
+    /// The entrance in the `to` level that the entrance leads to
+    pub spawn_at: String,
 }
