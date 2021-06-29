@@ -102,8 +102,7 @@ pub enum CharacterStateDirection {
 pub struct CharacterState {
     pub action: CharacterStateAction,
     pub direction: CharacterStateDirection,
-    pub tileset_index: u32,
-    pub animation_frame: u16,
+    pub anim_frame_idx: u32,
 }
 
 impl Default for CharacterState {
@@ -111,8 +110,7 @@ impl Default for CharacterState {
         Self {
             action: CharacterStateAction::Idle,
             direction: CharacterStateDirection::Down,
-            tileset_index: 0,
-            animation_frame: 0,
+            anim_frame_idx: 0,
         }
     }
 }

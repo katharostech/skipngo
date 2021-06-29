@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy_retrograde::prelude::{kira::parameter::tween::Tween, raui::core::make_widget};
 
 use super::*;
@@ -75,6 +77,7 @@ pub fn keyboard_control_input(
     mut control_events: EventWriter<ControlEvent>,
     keyboard_input: Res<Input<KeyCode>>,
     mut state: ResMut<State<GameState>>,
+    mut physics_time: ResMut<PhysicsTime>,
 ) {
     if keyboard_input.pressed(KeyCode::Escape) && !*pause_was_pressed {
         debug!("Pausing game");
@@ -82,6 +85,7 @@ pub fn keyboard_control_input(
             .push(GameState::Paused)
             .expect("Could not transition to paused state");
         *pause_was_pressed = true;
+        physics_time.pause();
     } else if !keyboard_input.pressed(KeyCode::Escape) {
         *pause_was_pressed = false;
     }
@@ -105,7 +109,7 @@ pub fn keyboard_control_input(
 
 /// Marker component for loaded characters
 pub struct CharacterLoaded;
-
+pub struct CharacterAnimationTimer(pub Timer);
 /// Add the sprite image and sprite sheet handles to the spawned character
 pub fn finish_spawning_character(
     mut commands: Commands,
@@ -155,7 +159,12 @@ pub fn finish_spawning_character(
                     ..Default::default()
                 })
                 // And make it a dynamic body
-                .insert(RigidBody::Dynamic);
+                .insert(RigidBody::Dynamic)
+                // Add a timer that will be used for calculating animation frames
+                .insert(CharacterAnimationTimer(Timer::new(
+                    Duration::from_millis(100),
+                    true,
+                )));
         }
     }
 }
@@ -225,8 +234,7 @@ pub fn control_character(
 
         // Reset character animation frame if direction or action changes
         if new_direction != character_state.direction || new_action != character_state.action {
-            character_state.tileset_index = 0;
-            character_state.animation_frame = 0;
+            character_state.anim_frame_idx = 0;
         }
         // Update character action
         if new_action != character_state.action {
@@ -255,21 +263,32 @@ pub fn animate_sprites(
         &mut Sprite,
         &mut CharacterState,
         &Handle<Character>,
+        &mut CharacterAnimationTimer,
     )>,
     mut sprite_sheet_assets: ResMut<Assets<SpriteSheet>>,
+    time: Res<Time>,
 ) {
-    for (sprite_sheet, mut sprite, mut state, character_handle) in query.iter_mut() {
-        if state.animation_frame % 10 == 0 {
-            state.animation_frame = 0;
+    // For every character and their sprites
+    for (sprite_sheet, mut sprite, mut state, character_handle, mut timer) in query.iter_mut() {
+        // Tick their animation timer
+        timer.0.tick(time.delta());
 
+        // If the timer has finished or if our animation state has changed
+        if timer.0.just_finished() || state.is_changed() {
+            // Reset the timer
+            timer.0.set_elapsed(Duration::from_millis(0));
+
+            // If the spritesheet info is loaded
             if let Some(sprite_sheet) = sprite_sheet_assets.get_mut(sprite_sheet) {
                 let character = characters.get(character_handle).unwrap();
 
+                // Get the character info for our current action
                 let action = match state.action {
                     CharacterStateAction::Walk => &character.actions.walk,
                     CharacterStateAction::Idle => &character.actions.idle,
                 };
 
+                // Get the animation frames for the direction we are facing
                 let direction = match state.direction {
                     CharacterStateDirection::Up => &action.animations.up,
                     CharacterStateDirection::Down => &action.animations.down,
@@ -277,21 +296,23 @@ pub fn animate_sprites(
                     CharacterStateDirection::Right => &action.animations.right,
                 };
 
+                // Flip the sprite if necessary
                 if direction.flip {
                     sprite.flip_x = true;
                 } else {
                     sprite.flip_x = false;
                 }
 
-                let idx = direction.frames[state.tileset_index as usize % direction.frames.len()];
+                // Get the index of the current animation frame
+                let idx = direction.frames[state.anim_frame_idx as usize % direction.frames.len()];
 
+                // Set the current tile in sprite sheet
                 sprite_sheet.tile_index = idx;
 
-                state.tileset_index = state.tileset_index.wrapping_add(1);
+                // Set
+                state.anim_frame_idx = state.anim_frame_idx.wrapping_add(1);
             }
         }
-
-        state.animation_frame = state.animation_frame.wrapping_add(1);
     }
 }
 
