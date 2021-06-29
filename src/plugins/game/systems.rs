@@ -2,11 +2,11 @@ use bevy::{
     core::FixedTimestep,
     ecs::{component::ComponentDescriptor, schedule::ShouldRun},
     prelude::*,
+    transform::TransformSystem,
     utils::HashSet,
     window::WindowMode,
 };
 use bevy_retrograde::{prelude::*, ui::raui::prelude::widget};
-use kira::parameter::tween::Tween;
 
 use super::*;
 
@@ -43,8 +43,12 @@ pub fn add_systems(app: &mut AppBuilder) {
             bevy::ecs::component::StorageType::SparseSet,
         ))
         .add_system(switch_fullscreen.system())
+        .add_system(game_init::update_map_collisions.system())
+        .add_system(game_init::update_map_entrances.system())
+        .add_system(game_init::reload_changed_map_entrances.system())
         // Game init state
         .add_state(GameState::Init)
+        // TODO: Migrate away from fixed timestep
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(
@@ -90,7 +94,8 @@ pub fn add_systems(app: &mut AppBuilder) {
                 .with_system(game_init::spawn_player_and_setup_level.system()),
         )
         // Main gameplay
-        .add_system_set(
+        .add_system_set_to_stage(
+            CoreStage::Update,
             SystemSet::new()
                 .with_run_criteria(
                     FixedTimestep::step(0.012).chain(
@@ -125,11 +130,31 @@ pub fn add_systems(app: &mut AppBuilder) {
                         .label("control_character")
                         .after("input"),
                 )
-                .with_system(animate_sprites.system().after("control_character"))
-                .with_system(camera_follow_system.system().after("control_character"))
+                .with_system(animate_sprites.system().after("control_character")), // .with_system(change_level.system().after("control_character")),
+        )
+        .add_system_set_to_stage(
+            CoreStage::Update,
+            SystemSet::new()
+                .with_run_criteria(
+                    (|state: Res<State<GameState>>| {
+                        if state.current() == &GameState::Playing {
+                            ShouldRun::Yes
+                        } else {
+                            ShouldRun::No
+                        }
+                    })
+                    .system(),
+                )
                 .with_system(change_level.system().after("control_character")),
         )
-        //
+        .add_system_to_stage(
+            CoreStage::PostUpdate,
+            camera_follow_system
+                .system()
+                .before(TransformSystem::TransformPropagate)
+                .after(PhysicsSystem::TransformUpdate),
+        )
+        // Pause menu state
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(
