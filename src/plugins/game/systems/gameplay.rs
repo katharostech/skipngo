@@ -639,9 +639,17 @@ pub fn change_level(
             camera.background_color = Color::from_rgba8(decoded[0], decoded[1], decoded[2], 1);
         }
 
+        // Move the character to the other entrance
         *character_transform = Transform::from_xyz(
-            to_level.world_x as f32 + to_entrance.px[0] as f32 + to_entrance.width as f32 / 2.,
-            to_level.world_y as f32 + to_entrance.px[1] as f32 + to_entrance.height as f32 / 2.,
+            // FIXME: We subtract 0.1 pixels to push the sprite very slightly to the left because
+            // there were issues when teleporting where we were just enough to the right that we
+            // could somehow go through the first block of doorpost.
+            //
+            // Not sure why, but this is the easiest place to fix for now.
+            to_level.world_x as f32 + to_entrance.px[0] as f32 + to_entrance.width as f32 / 2.
+                - 0.1,
+            to_level.world_y as f32 + to_entrance.px[1] as f32 + to_entrance.height as f32 / 2.
+                - 0.1,
             to_level
                 .layer_instances
                 .as_ref()

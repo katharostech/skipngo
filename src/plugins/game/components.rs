@@ -144,3 +144,32 @@ pub struct Entrance {
     /// The entrance in the `to` level that the entrance leads to
     pub spawn_at: String,
 }
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct TilesetTileMetadata {
+    #[serde(default)]
+    pub collision: TilesetTileCollisionMode,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub enum TilesetTileCollisionMode {
+    /// No collision for this tile
+    None,
+    /// Create a collision shape based on the tile alpha channel
+    FromAlpha,
+    /// Fill the whole tile square as the collision box
+    Full,
+    /// Create a collision based on the alpha of a tile in a tilesheet of the same size, that is
+    /// used only for creating collision shapes
+    FromAlphaReference {
+        /// The path to the tilesheet to use as a collision reference
+        tileset: String,
+    }
+}
+
+impl Default for TilesetTileCollisionMode {
+    fn default() -> Self {
+        Self::None
+    }
+}

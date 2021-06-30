@@ -47,9 +47,10 @@ pub fn add_systems(app: &mut AppBuilder) {
             bevy::ecs::component::StorageType::SparseSet,
         ))
         .add_system(switch_fullscreen.system())
-        .add_system(game_init::update_map_collisions.system())
-        .add_system(game_init::update_map_entrances.system())
-        .add_system(game_init::reload_changed_map_entrances.system())
+        .add_system(game_init::spawn_map_collisions.system())
+        .add_system(game_init::hot_reload_map_collisions.system())
+        .add_system(game_init::spawn_map_entrances.system())
+        .add_system(game_init::hot_reload_map_entrances.system())
         // Game init state
         .add_state(GameState::Init)
         .add_system_set(
