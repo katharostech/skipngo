@@ -376,7 +376,6 @@ fn settings_panel(mut ctx: WidgetContext) -> WidgetNode {
 
     // Settings panel
     let panel_props = Props::new(ContentBoxItemLayout {
-        // TODO: Open RAUI bug, margin somehow applies to both the inside and outside of the panel
         margin: Rect {
             left: 13.,
             right: 13.,
@@ -416,10 +415,6 @@ fn settings_panel(mut ctx: WidgetContext) -> WidgetNode {
     let cancel_button_props = Props::new(FlexBoxItemLayout {
         align: 0.5,
         grow: 0.0,
-        margin: Rect {
-            top: 10.,
-            ..Default::default()
-        },
         ..Default::default()
     })
     .with(GameButtonProps {
@@ -432,10 +427,6 @@ fn settings_panel(mut ctx: WidgetContext) -> WidgetNode {
     let save_button_props = Props::new(FlexBoxItemLayout {
         align: 0.5,
         grow: 0.0,
-        margin: Rect {
-            top: 10.,
-            ..Default::default()
-        },
         ..Default::default()
     })
     .with(GameButtonProps {
@@ -449,17 +440,12 @@ fn settings_panel(mut ctx: WidgetContext) -> WidgetNode {
         .with(FlexBoxProps {
             wrap: true,
             direction: FlexBoxDirection::HorizontalLeftToRight,
-            separation: 17.,
+            separation: 10.,
             ..Default::default()
         })
         .with(FlexBoxItemLayout {
-            grow: 0.0,
+            grow: 0.,
             align: 0.5,
-            margin: Rect {
-                top: 8.,
-                bottom: 8.,
-                ..Default::default()
-            },
             ..Default::default()
         });
 
@@ -581,24 +567,36 @@ fn settings_panel(mut ctx: WidgetContext) -> WidgetNode {
         ..Default::default()
     });
 
+    let margin_box_props = FlexBoxItemLayout {
+        margin: Rect {
+            top: 10.,
+            bottom: 10.,
+            left: 15.,
+            right: 15.,
+        },
+        ..Default::default()
+    };
+
     widget! {
         (nav_content_box [
             (nav_vertical_paper: {panel_props} [
-                (text_box: {title_props})
-                (vertical_box [
-                    (text_box: {graphics_settings_title_props})
-                    (horizontal_box: {check_box_wrapper_props.clone()} [
-                        (#{"crt_filter"} switch_button_paper: {crt_filter_check_props})
-                        (text_box: {crt_filter_text_props})
+                (vertical_box: {margin_box_props} [
+                    (text_box: {title_props})
+                    (vertical_box [
+                        (text_box: {graphics_settings_title_props})
+                        (horizontal_box: {check_box_wrapper_props.clone()} [
+                            (#{"crt_filter"} switch_button_paper: {crt_filter_check_props})
+                            (text_box: {crt_filter_text_props})
+                        ])
+                        (horizontal_box: {check_box_wrapper_props} [
+                            (#{"pixel_aspect"} switch_button_paper: {pixel_aspect_check_props})
+                            (text_box: {pixel_aspect_text_props})
+                        ])
                     ])
-                    (horizontal_box: {check_box_wrapper_props} [
-                        (#{"pixel_aspect"} switch_button_paper: {pixel_aspect_check_props})
-                        (text_box: {pixel_aspect_text_props})
+                    (flex_box: {button_box_props} [
+                        (game_button: {cancel_button_props})
+                        (game_button: {save_button_props})
                     ])
-                ])
-                (flex_box: {button_box_props} [
-                    (game_button: {cancel_button_props})
-                    (game_button: {save_button_props})
                 ])
             ])
         ])
