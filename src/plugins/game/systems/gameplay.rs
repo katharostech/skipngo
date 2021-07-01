@@ -26,6 +26,22 @@ pub fn spawn_hud(state: Res<State<GameState>>, mut ui: ResMut<UiTree>) {
     }
 }
 
+/// Switch to game over when the player runs out of health
+pub fn check_for_game_over(
+    characters: Query<&Health, With<Handle<Character>>>,
+    mut state: ResMut<State<GameState>>,
+) {
+    for character_health in characters.iter() {
+        // If player health is 0, then go to game over
+        if character_health.current == 0 {
+            state
+                .push(GameState::GameOver)
+                .expect("Could not transition to game over state");
+        }
+    }
+}
+
+/// Listen for touch events and send character control events in response
 pub fn touch_control_input(
     mut tracked_touch: Local<Option<u64>>,
     mut touch_events: EventReader<TouchInput>,
@@ -72,6 +88,7 @@ pub fn touch_control_input(
     }
 }
 
+/// Listen for keyboard events and send character control events in response
 pub fn keyboard_control_input(
     mut pause_was_pressed: Local<bool>,
     mut control_events: EventWriter<ControlEvent>,
@@ -169,7 +186,7 @@ pub fn finish_spawning_character(
     }
 }
 
-/// Walk the character in response to input
+/// Move the character in response to character control events
 pub fn control_character(
     mut characters: Query<
         (
@@ -338,7 +355,7 @@ pub fn damage_character(
         };
 
         // Damage the player
-        character_health.current -= damage_region.damage;
+        character_health.current -= damage_region.damage.min(character_health.current);
 
         // Put the player into knock-back frames
         character_state.action = CharacterStateAction::DamageKnockBack {

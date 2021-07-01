@@ -1,10 +1,11 @@
 use bevy::{
-    ecs::component::ComponentDescriptor, prelude::*, transform::TransformSystem, utils::HashSet,
+    ecs::{component::ComponentDescriptor, schedule::ShouldRun},
+    prelude::*,
+    transform::TransformSystem,
+    utils::HashSet,
     window::WindowMode,
 };
 use bevy_retrograde::{prelude::*, ui::raui::prelude::widget};
-
-use crate::plugins::game::systems::gameplay::damage_character;
 
 use super::*;
 
@@ -13,9 +14,12 @@ mod pause_menu;
 
 mod gameplay;
 use gameplay::{
-    animate_sprites, camera_follow_system, change_level, control_character,
-    finish_spawning_character, keyboard_control_input, spawn_hud, touch_control_input,
+    animate_sprites, camera_follow_system, change_level, check_for_game_over, control_character,
+    damage_character, finish_spawning_character, keyboard_control_input, spawn_hud,
+    touch_control_input,
 };
+
+mod game_over;
 
 /// The game states
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -30,6 +34,8 @@ pub enum GameState {
     Playing,
     /// The game is paused during the main game
     Paused,
+    /// The game over screen is being shown
+    GameOver,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, SystemLabel)]
@@ -74,6 +80,7 @@ pub fn add_systems(app: &mut AppBuilder) {
             SystemSet::on_update(GameState::Playing)
                 .with_system(spawn_hud.system())
                 .with_system(finish_spawning_character.system().label(FinishSpawn))
+                .with_system(check_for_game_over.system().before(ControlCharacter))
                 .with_system(touch_control_input.system().label(Input).after(FinishSpawn))
                 .with_system(
                     keyboard_control_input
@@ -90,23 +97,41 @@ pub fn add_systems(app: &mut AppBuilder) {
                 .with_system(animate_sprites.system().after(ControlCharacter))
                 .with_system(change_level.system().after(ControlCharacter)),
         )
-        .add_system_to_stage(
+        .add_system_set_to_stage(
             CoreStage::PostUpdate,
-            camera_follow_system
-                .system()
-                .before(TransformSystem::TransformPropagate)
-                .after(PhysicsSystem::TransformUpdate),
-        )
-        .add_system_to_stage(
-            CoreStage::PostUpdate,
-            damage_character
-                .system()
-                .after(PhysicsSystem::TransformUpdate),
+            SystemSet::new()
+                .with_run_criteria(
+                    (|state: Res<State<GameState>>| {
+                        if state.current() == &GameState::Playing {
+                            ShouldRun::Yes
+                        } else {
+                            ShouldRun::No
+                        }
+                    })
+                    .system(),
+                )
+                .with_system(
+                    camera_follow_system
+                        .system()
+                        .before(TransformSystem::TransformPropagate)
+                        .after(PhysicsSystem::TransformUpdate),
+                )
+                .with_system(
+                    damage_character
+                        .system()
+                        .after(PhysicsSystem::TransformUpdate),
+                ),
         )
         // Pause menu state
         .add_system_set(
             SystemSet::on_update(GameState::Paused)
                 .with_system(pause_menu::handle_pause_menu.system()),
+        )
+        // Game over menu state
+        .add_system_set_to_stage(
+            CoreStage::Update,
+            SystemSet::on_update(GameState::GameOver)
+                .with_system(game_over::run_game_over_screen.system()),
         );
 }
 

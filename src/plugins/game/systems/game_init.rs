@@ -562,7 +562,14 @@ pub fn setup_start_menu(
     asset_server: Res<AssetServer>,
     mut sound_controller: SoundController,
     mut commands: Commands,
+    state: Res<State<GameState>>,
 ) {
+    // If the game state has just changed, reset the completed flag
+    if state.is_changed() && *completed {
+        *completed = false;
+        return;
+    }
+
     // Run only once
     if *completed {
         return;
