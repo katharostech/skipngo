@@ -1,12 +1,10 @@
 use bevy::{
-    core::FixedTimestep,
-    ecs::{component::ComponentDescriptor, schedule::ShouldRun},
-    prelude::*,
-    transform::TransformSystem,
-    utils::HashSet,
+    ecs::component::ComponentDescriptor, prelude::*, transform::TransformSystem, utils::HashSet,
     window::WindowMode,
 };
 use bevy_retrograde::{prelude::*, ui::raui::prelude::widget};
+
+use crate::plugins::game::systems::gameplay::damage_character;
 
 use super::*;
 
@@ -34,7 +32,15 @@ pub enum GameState {
     Paused,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, SystemLabel)]
+pub enum GameSystemLabels {
+    FinishSpawn,
+    Input,
+    ControlCharacter,
+}
+
 pub fn add_systems(app: &mut AppBuilder) {
+    use GameSystemLabels::*;
     debug!("Configuring game systems");
 
     app
@@ -43,109 +49,46 @@ pub fn add_systems(app: &mut AppBuilder) {
             bevy::ecs::component::StorageType::SparseSet,
         ))
         .add_system(switch_fullscreen.system())
-        .add_system(game_init::update_map_collisions.system())
-        .add_system(game_init::update_map_entrances.system())
-        .add_system(game_init::reload_changed_map_entrances.system())
+        .add_system(game_init::spawn_map_collisions.system())
+        .add_system(game_init::hot_reload_map_collisions.system())
+        .add_system(game_init::spawn_map_entrances.system())
+        .add_system(game_init::hot_reload_map_entrances.system())
         // Game init state
         .add_state(GameState::Init)
-        // TODO: Migrate away from fixed timestep
         .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(
-                    (|state: Res<State<GameState>>| {
-                        if state.current() == &GameState::Init {
-                            ShouldRun::Yes
-                        } else {
-                            ShouldRun::No
-                        }
-                    })
-                    .system(),
-                )
-                .with_system(game_init::await_init.system()),
+            SystemSet::on_update(GameState::Init).with_system(game_init::await_init.system()),
         )
         // Game start menu state
         .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(
-                    (|state: Res<State<GameState>>| {
-                        if state.current() == &GameState::StartMenu {
-                            ShouldRun::Yes
-                        } else {
-                            ShouldRun::No
-                        }
-                    })
-                    .system(),
-                )
+            SystemSet::on_update(GameState::StartMenu)
                 .with_system(game_init::setup_start_menu.system()),
         )
         // Loading main game state
         .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(
-                    (|state: Res<State<GameState>>| {
-                        if state.current() == &GameState::LoadingGame {
-                            ShouldRun::Yes
-                        } else {
-                            ShouldRun::No
-                        }
-                    })
-                    .system(),
-                )
+            SystemSet::on_update(GameState::LoadingGame)
                 .with_system(game_init::spawn_player_and_setup_level.system()),
         )
         // Main gameplay
         .add_system_set_to_stage(
             CoreStage::Update,
-            SystemSet::new()
-                .with_run_criteria(
-                    FixedTimestep::step(0.012).chain(
-                        // Workaround: https://github.com/bevyengine/bevy/issues/1839
-                        (|In(input): In<ShouldRun>, state: Res<State<GameState>>| {
-                            if state.current() == &GameState::Playing {
-                                input
-                            } else {
-                                ShouldRun::No
-                            }
-                        })
-                        .system(),
-                    ),
-                )
+            SystemSet::on_update(GameState::Playing)
                 .with_system(spawn_hud.system())
-                .with_system(finish_spawning_character.system().label("finish_spawn"))
-                .with_system(
-                    touch_control_input
-                        .system()
-                        .label("input")
-                        .after("finish_spawn"),
-                )
+                .with_system(finish_spawning_character.system().label(FinishSpawn))
+                .with_system(touch_control_input.system().label(Input).after(FinishSpawn))
                 .with_system(
                     keyboard_control_input
                         .system()
-                        .label("input")
-                        .after("finish_spawn"),
+                        .label(Input)
+                        .after(FinishSpawn),
                 )
                 .with_system(
                     control_character
                         .system()
-                        .label("control_character")
-                        .after("input"),
+                        .label(ControlCharacter)
+                        .after(Input),
                 )
-                .with_system(animate_sprites.system().after("control_character")), // .with_system(change_level.system().after("control_character")),
-        )
-        .add_system_set_to_stage(
-            CoreStage::Update,
-            SystemSet::new()
-                .with_run_criteria(
-                    (|state: Res<State<GameState>>| {
-                        if state.current() == &GameState::Playing {
-                            ShouldRun::Yes
-                        } else {
-                            ShouldRun::No
-                        }
-                    })
-                    .system(),
-                )
-                .with_system(change_level.system().after("control_character")),
+                .with_system(animate_sprites.system().after(ControlCharacter))
+                .with_system(change_level.system().after(ControlCharacter)),
         )
         .add_system_to_stage(
             CoreStage::PostUpdate,
@@ -154,19 +97,15 @@ pub fn add_systems(app: &mut AppBuilder) {
                 .before(TransformSystem::TransformPropagate)
                 .after(PhysicsSystem::TransformUpdate),
         )
+        .add_system_to_stage(
+            CoreStage::PostUpdate,
+            damage_character
+                .system()
+                .after(PhysicsSystem::TransformUpdate),
+        )
         // Pause menu state
         .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(
-                    (|state: Res<State<GameState>>| {
-                        if state.current() == &GameState::Paused {
-                            ShouldRun::Yes
-                        } else {
-                            ShouldRun::No
-                        }
-                    })
-                    .system(),
-                )
+            SystemSet::on_update(GameState::Paused)
                 .with_system(pause_menu::handle_pause_menu.system()),
         );
 }

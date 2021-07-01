@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_retrograde::prelude::{
     raui::{core::make_widget, prelude::WidgetNode},
-    UiTree,
+    PhysicsTime, UiTree,
 };
 
 use super::GameState;
@@ -11,18 +11,18 @@ pub fn handle_pause_menu(
     mut ui: ResMut<UiTree>,
     keyboard_input: Res<Input<KeyCode>>,
     mut state: ResMut<State<GameState>>,
+    mut physics_time: ResMut<PhysicsTime>,
 ) {
     if !*pause_menu_visible {
         debug!("Showing pause menu");
         *pause_menu_visible = true;
         *ui = UiTree(make_widget!(ui::pause_menu).into());
-    }
-
-    if keyboard_input.just_pressed(KeyCode::Escape) {
+    } else if keyboard_input.just_pressed(KeyCode::Escape) {
         debug!("Unpausing and hiding pause menu");
         state.pop().expect("Could not transition game state");
         *ui = UiTree(WidgetNode::None);
         *pause_menu_visible = false;
+        physics_time.resume();
     }
 }
 

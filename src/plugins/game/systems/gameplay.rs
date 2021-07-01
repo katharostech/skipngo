@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy_retrograde::prelude::{kira::parameter::tween::Tween, raui::core::make_widget};
 
 use super::*;
@@ -75,6 +77,7 @@ pub fn keyboard_control_input(
     mut control_events: EventWriter<ControlEvent>,
     keyboard_input: Res<Input<KeyCode>>,
     mut state: ResMut<State<GameState>>,
+    mut physics_time: ResMut<PhysicsTime>,
 ) {
     if keyboard_input.pressed(KeyCode::Escape) && !*pause_was_pressed {
         debug!("Pausing game");
@@ -82,6 +85,7 @@ pub fn keyboard_control_input(
             .push(GameState::Paused)
             .expect("Could not transition to paused state");
         *pause_was_pressed = true;
+        physics_time.pause();
     } else if !keyboard_input.pressed(KeyCode::Escape) {
         *pause_was_pressed = false;
     }
@@ -105,7 +109,7 @@ pub fn keyboard_control_input(
 
 /// Marker component for loaded characters
 pub struct CharacterLoaded;
-
+pub struct CharacterAnimationTimer(pub Timer);
 /// Add the sprite image and sprite sheet handles to the spawned character
 pub fn finish_spawning_character(
     mut commands: Commands,
@@ -155,7 +159,12 @@ pub fn finish_spawning_character(
                     ..Default::default()
                 })
                 // And make it a dynamic body
-                .insert(RigidBody::Dynamic);
+                .insert(RigidBody::Dynamic)
+                // Add a timer that will be used for calculating animation frames
+                .insert(CharacterAnimationTimer(Timer::new(
+                    Duration::from_millis(100),
+                    true,
+                )));
         }
     }
 }
@@ -173,6 +182,7 @@ pub fn control_character(
     >,
     character_assets: Res<Assets<Character>>,
     mut control_events: EventReader<ControlEvent>,
+    time: Res<Time>,
 ) {
     // Loop through characters
     for (character_handle, character_transform, mut character_state, mut character_velocity) in
@@ -185,6 +195,44 @@ pub fn control_character(
         };
 
         let mut movement = Vec3::default();
+
+        // Check for damage knock-back state
+        //
+        // We do a check for the enum variant first so we avoid mutably borrowing and triggering the
+        // is_changed() detection.
+        if matches!(
+            &character_state.action,
+            CharacterStateAction::DamageKnockBack { .. }
+        ) {
+            if let CharacterStateAction::DamageKnockBack {
+                force_timer,
+                freeze_timer,
+            } = &mut character_state.action
+            {
+                // Tick the knock-back timers
+                force_timer.tick(time.delta());
+                freeze_timer.tick(time.delta());
+
+                let mut skip_controls = false;
+
+                // If the freeze timer has **not** finished
+                if !freeze_timer.finished() {
+                    // Skip running the normal character controller behaviour to freeze the controls
+                    skip_controls = true;
+                } else {
+                }
+
+                // If the force timer has finished
+                if force_timer.finished() {
+                    // Set the velocity to 0
+                    *character_velocity = Velocity::from_linear(Vec3::default());
+                }
+
+                if skip_controls {
+                    continue;
+                }
+            }
+        }
 
         // Determine movement direction
         let mut directions = HashSet::default();
@@ -225,8 +273,7 @@ pub fn control_character(
 
         // Reset character animation frame if direction or action changes
         if new_direction != character_state.direction || new_action != character_state.action {
-            character_state.tileset_index = 0;
-            character_state.animation_frame = 0;
+            character_state.anim_frame_idx = 0;
         }
         // Update character action
         if new_action != character_state.action {
@@ -247,6 +294,78 @@ pub fn control_character(
     }
 }
 
+/// Handles damaging characters
+pub fn damage_character(
+    mut characters: Query<
+        (
+            &mut Velocity,
+            &mut CharacterState,
+            &mut Health,
+            &GlobalTransform,
+        ),
+        With<Handle<Character>>,
+    >,
+    damage_regions: Query<(&DamageRegion, &GlobalTransform)>,
+    mut collision_events: EventReader<CollisionEvent>,
+) {
+    // Check characters colliding with entrances
+    for event in collision_events.iter() {
+        let (ent1, ent2) = event.collision_shape_entities();
+
+        // If this is not a started event, skip it
+        if !event.is_started() {
+            continue;
+        }
+
+        // Get the character from the collision or skip the event
+        let (mut character_velocity, mut character_state, mut character_health, character_location) =
+            if let Ok(character) = characters.get_mut(ent1) {
+                character
+            } else if let Ok(character) = characters.get_mut(ent2) {
+                character
+            } else {
+                continue;
+            };
+
+        // Get the damage region of the collision or skip the event
+        let (damage_region, damage_region_location) = if let Ok(region) = damage_regions
+            .get(ent1)
+            .or_else(|_| damage_regions.get(ent2))
+        {
+            region
+        } else {
+            continue;
+        };
+
+        // Damage the player
+        character_health.current -= damage_region.damage;
+
+        // Put the player into knock-back frames
+        character_state.action = CharacterStateAction::DamageKnockBack {
+            force_timer: Timer::new(
+                Duration::from_secs_f32(damage_region.knock_back.force_duration),
+                false,
+            ),
+            freeze_timer: Timer::new(
+                Duration::from_secs_f32(damage_region.knock_back.freeze_duration),
+                false,
+            ),
+        };
+
+        // FIXME: We need to make sure the location is properly updated, right now we use
+        // GlobalTransform, but maybe we need to run this system after the transform propagation
+        // system.
+
+        // Get the push direction
+        let push_direction = (character_location.translation - damage_region_location.translation)
+            .normalize_or_zero();
+
+        // Set the character velocity
+        *character_velocity =
+            Velocity::from_linear(push_direction * damage_region.knock_back.speed);
+    }
+}
+
 /// Play the character's sprite animation
 pub fn animate_sprites(
     characters: Res<Assets<Character>>,
@@ -255,21 +374,34 @@ pub fn animate_sprites(
         &mut Sprite,
         &mut CharacterState,
         &Handle<Character>,
+        &mut CharacterAnimationTimer,
     )>,
     mut sprite_sheet_assets: ResMut<Assets<SpriteSheet>>,
+    time: Res<Time>,
 ) {
-    for (sprite_sheet, mut sprite, mut state, character_handle) in query.iter_mut() {
-        if state.animation_frame % 10 == 0 {
-            state.animation_frame = 0;
+    // For every character and their sprites
+    for (sprite_sheet, mut sprite, mut state, character_handle, mut timer) in query.iter_mut() {
+        // Tick their animation timer
+        timer.0.tick(time.delta());
 
+        // If the timer has finished or if our animation state has changed
+        if timer.0.just_finished() || state.is_changed() {
+            // Reset the timer
+            timer.0.set_elapsed(Duration::from_millis(0));
+
+            // If the spritesheet info is loaded
             if let Some(sprite_sheet) = sprite_sheet_assets.get_mut(sprite_sheet) {
                 let character = characters.get(character_handle).unwrap();
 
+                // Get the character info for our current action
                 let action = match state.action {
+                    CharacterStateAction::Idle | CharacterStateAction::DamageKnockBack { .. } => {
+                        &character.actions.idle
+                    }
                     CharacterStateAction::Walk => &character.actions.walk,
-                    CharacterStateAction::Idle => &character.actions.idle,
                 };
 
+                // Get the animation frames for the direction we are facing
                 let direction = match state.direction {
                     CharacterStateDirection::Up => &action.animations.up,
                     CharacterStateDirection::Down => &action.animations.down,
@@ -277,21 +409,23 @@ pub fn animate_sprites(
                     CharacterStateDirection::Right => &action.animations.right,
                 };
 
+                // Flip the sprite if necessary
                 if direction.flip {
                     sprite.flip_x = true;
                 } else {
                     sprite.flip_x = false;
                 }
 
-                let idx = direction.frames[state.tileset_index as usize % direction.frames.len()];
+                // Get the index of the current animation frame
+                let idx = direction.frames[state.anim_frame_idx as usize % direction.frames.len()];
 
+                // Set the current tile in sprite sheet
                 sprite_sheet.tile_index = idx;
 
-                state.tileset_index = state.tileset_index.wrapping_add(1);
+                // Set
+                state.anim_frame_idx = state.anim_frame_idx.wrapping_add(1);
             }
         }
-
-        state.animation_frame = state.animation_frame.wrapping_add(1);
     }
 }
 
@@ -618,9 +752,17 @@ pub fn change_level(
             camera.background_color = Color::from_rgba8(decoded[0], decoded[1], decoded[2], 1);
         }
 
+        // Move the character to the other entrance
         *character_transform = Transform::from_xyz(
-            to_level.world_x as f32 + to_entrance.px[0] as f32 + to_entrance.width as f32 / 2.,
-            to_level.world_y as f32 + to_entrance.px[1] as f32 + to_entrance.height as f32 / 2.,
+            // FIXME: We subtract 0.1 pixels to push the sprite very slightly to the left because
+            // there were issues when teleporting where we were just enough to the right that we
+            // could somehow go through the first block of doorpost.
+            //
+            // Not sure why, but this is the easiest place to fix for now.
+            to_level.world_x as f32 + to_entrance.px[0] as f32 + to_entrance.width as f32 / 2.
+                - 0.1,
+            to_level.world_y as f32 + to_entrance.px[1] as f32 + to_entrance.height as f32 / 2.
+                - 0.1,
             to_level
                 .layer_instances
                 .as_ref()
