@@ -4,6 +4,8 @@ use bevy::{
 };
 use bevy_retrograde::{prelude::*, ui::raui::prelude::widget};
 
+use crate::plugins::game::systems::gameplay::damage_character;
+
 use super::*;
 
 mod game_init;
@@ -93,6 +95,12 @@ pub fn add_systems(app: &mut AppBuilder) {
             camera_follow_system
                 .system()
                 .before(TransformSystem::TransformPropagate)
+                .after(PhysicsSystem::TransformUpdate),
+        )
+        .add_system_to_stage(
+            CoreStage::PostUpdate,
+            damage_character
+                .system()
                 .after(PhysicsSystem::TransformUpdate),
         )
         // Pause menu state

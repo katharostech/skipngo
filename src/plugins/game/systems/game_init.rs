@@ -87,8 +87,16 @@ pub fn await_init(
     }
 }
 
-/// Component that caches map tileset collisions based on the tilesetid and the tile id
-pub struct LdtkMapTilesetTileCollisions(pub HashMap<(i32, i32), CollisionShape>);
+/// Component that caches map tileset collision info
+///
+/// Keyed by (tileset_uid, tile_id)
+pub struct LdtkMapTilesetTileCache(pub HashMap<(i32, i32), LdtkMapTilesetTileCacheItem>);
+/// An item in the [`LdtkMapTilesetTileCache`]
+#[derive(Clone)]
+pub struct LdtkMapTilesetTileCacheItem {
+    pub collision_shape: CollisionShape,
+    pub damage_region: Option<DamageRegion>,
+}
 /// Component used to mark map collision shapes
 pub struct LdtkMapTileCollisionShape;
 /// Component used to mark the map as having had its collisions loaded
@@ -97,11 +105,7 @@ pub struct LdtkMapTileCollisionsLoaded;
 pub fn spawn_map_collisions(
     mut commands: Commands,
     maps: Query<
-        (
-            Entity,
-            &Handle<LdtkMap>,
-            Option<&LdtkMapTilesetTileCollisions>,
-        ),
+        (Entity, &Handle<LdtkMap>, Option<&LdtkMapTilesetTileCache>),
         Without<LdtkMapTileCollisionsLoaded>,
     >,
     map_assets: Res<Assets<LdtkMap>>,
@@ -131,13 +135,7 @@ pub fn spawn_map_collisions(
         let tileset_images = if let Some(tile_sets) = map
             .tile_sets
             .iter()
-            .map(|(name, handle)| {
-                if let Some(image) = image_assets.get(handle) {
-                    Some((name, image))
-                } else {
-                    None
-                }
-            })
+            .map(|(name, handle)| image_assets.get(handle).map(|image| (name, image)))
             .collect::<Option<HashMap<_, _>>>()
         {
             tile_sets
@@ -146,9 +144,10 @@ pub fn spawn_map_collisions(
         };
 
         // Tilemap tile collisions indexed by (tileset_uid, tile_id)
-        let mut tileset_tile_collisions = tileset_tile_collisions_component
-            .map(|x| x.0.clone())
-            .unwrap_or_default();
+        let mut tileset_tile_cache: HashMap<(i32, i32), LdtkMapTilesetTileCacheItem> =
+            tileset_tile_collisions_component
+                .map(|x| x.0.clone())
+                .unwrap_or_default();
 
         // Generate collision shapes for all of the tiles in each tileset
         for tileset_def in &map.project.defs.tilesets {
@@ -167,7 +166,7 @@ pub fn spawn_map_collisions(
                     .expect("Tile `data` field not a string");
 
                 // If we already have the collision calculated for this tile, skip it
-                if tileset_tile_collisions.contains_key(&(tileset_def.uid, tile_id)) {
+                if tileset_tile_cache.contains_key(&(tileset_def.uid, tile_id)) {
                     continue;
                 }
 
@@ -232,27 +231,23 @@ pub fn spawn_map_collisions(
                     }
                 }
 
-                match tileset_tile_metadata.collision {
+                // Get the tile collision shape
+                let collision_shape = match tileset_tile_metadata.collision {
                     // Create a cuboid collision for this block
-                    TilesetTileCollisionMode::Full => {
-                        tileset_tile_collisions.insert(
-                            (tileset_def.uid, tile_id),
-                            CollisionShape::Cuboid {
-                                half_extends: Vec3::new(
-                                    tileset_def.tile_grid_size as f32 / 2.0,
-                                    tileset_def.tile_grid_size as f32 / 2.0,
-                                    0.,
-                                ),
-                                border_radius: None,
-                            },
-                        );
-                    }
+                    TilesetTileCollisionMode::Full => Some(CollisionShape::Cuboid {
+                        half_extends: Vec3::new(
+                            tileset_def.tile_grid_size as f32 / 2.0,
+                            tileset_def.tile_grid_size as f32 / 2.0,
+                            0.,
+                        ),
+                        border_radius: None,
+                    }),
                     // Spawn a tesselated collision shape generated from
                     TilesetTileCollisionMode::FromAlpha => {
                         let collision_shape = create_alpha_based_collision!(tileset_image);
 
                         // Add the collision to the list
-                        tileset_tile_collisions.insert((tileset_def.uid, tile_id), collision_shape);
+                        Some(collision_shape)
                     }
                     // Create a collision from the alpha of a corresponding tile in a reference tilesheet
                     TilesetTileCollisionMode::FromAlphaReference {
@@ -276,8 +271,7 @@ pub fn spawn_map_collisions(
                         } else {
                             // Store the collisions we have currently and wait to try again next
                             // frame
-                            map_commands
-                                .insert(LdtkMapTilesetTileCollisions(tileset_tile_collisions));
+                            map_commands.insert(LdtkMapTilesetTileCache(tileset_tile_cache));
                             continue 'map_load;
                         };
 
@@ -285,10 +279,21 @@ pub fn spawn_map_collisions(
                             create_alpha_based_collision!(tileset_reference_image);
 
                         // Add the collision to the list
-                        tileset_tile_collisions.insert((tileset_def.uid, tile_id), collision_shape);
+                        Some(collision_shape)
                     }
                     // Don't do anything for empty collisions
-                    TilesetTileCollisionMode::None => (),
+                    TilesetTileCollisionMode::None => None,
+                };
+
+                // If the tile has a collision shape, add it to the cache
+                if let Some(collision_shape) = collision_shape {
+                    tileset_tile_cache.insert(
+                        (tileset_def.uid, tile_id),
+                        LdtkMapTilesetTileCacheItem {
+                            collision_shape,
+                            damage_region: tileset_tile_metadata.damage_region.clone(),
+                        },
+                    );
                 }
             }
         }
@@ -354,16 +359,21 @@ pub fn spawn_map_collisions(
                     let half_tile_size = Vec3::new(tile_size / 2.0, tile_size / 2.0, 0.);
 
                     // Spawn a collision shape for this tile if one exists
-                    if let Some(collision_shape) =
-                        tileset_tile_collisions.get(&(tileset_uid, tile.t))
-                    {
+                    if let Some(tile_cache_item) = tileset_tile_cache.get(&(tileset_uid, tile.t)) {
                         map_commands.with_children(|map| {
-                            map.spawn_bundle((
+                            // Spawn the entity with the collision shape
+                            let mut entity_commands = map.spawn_bundle((
                                 LdtkMapTileCollisionShape,
-                                collision_shape.clone(),
+                                tile_cache_item.collision_shape.clone(),
                                 Transform::from_translation(tile_pos + half_tile_size),
                                 GlobalTransform::default(),
                             ));
+
+                            // If the tile has a damage region
+                            if let Some(damage_region) = &tile_cache_item.damage_region {
+                                // Add the damage region component as well
+                                entity_commands.insert(damage_region.clone());
+                            }
                         });
                     }
                 }
@@ -393,7 +403,7 @@ pub fn hot_reload_map_collisions(
                     commands
                         .entity(map_ent)
                         .remove::<LdtkMapTileCollisionsLoaded>()
-                        .remove::<LdtkMapTilesetTileCollisions>();
+                        .remove::<LdtkMapTilesetTileCache>();
 
                     // For every tile collision
                     for (tile_ent, parent) in tile_collisions.iter() {
@@ -415,7 +425,9 @@ pub fn spawn_map_entrances(
     maps: Query<(Entity, &Handle<LdtkMap>), Without<LdtkMapEntrancesLoaded>>,
     map_assets: Res<Assets<LdtkMap>>,
 ) {
+    // For every map
     for (ent, map_handle) in maps.iter() {
+        // Get the map
         let map = if let Some(map) = map_assets.get(map_handle) {
             map
         } else {
@@ -424,9 +436,12 @@ pub fn spawn_map_entrances(
 
         let mut map_commands = commands.entity(ent);
 
+        // For every level in the map
         for level in &map.project.levels {
+            // Get the level's position offest
             let level_offset = Vec3::new(level.world_x as f32, level.world_y as f32, 0.);
 
+            // For every layer in the level
             for layer in level
                 .layer_instances
                 .as_ref()
@@ -434,11 +449,13 @@ pub fn spawn_map_entrances(
                 .iter()
                 .filter(|x| x.__type == "Entities")
             {
+                // Get the layer offset
                 let layer_offset = Vec3::new(
                     layer.__px_total_offset_x as f32,
                     layer.__px_total_offset_y as f32,
                     0.,
                 );
+
                 // Spawn collision sensors for the entrances
                 for entrance in layer
                     .entity_instances

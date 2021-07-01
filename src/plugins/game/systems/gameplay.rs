@@ -182,6 +182,7 @@ pub fn control_character(
     >,
     character_assets: Res<Assets<Character>>,
     mut control_events: EventReader<ControlEvent>,
+    time: Res<Time>,
 ) {
     // Loop through characters
     for (character_handle, character_transform, mut character_state, mut character_velocity) in
@@ -194,6 +195,44 @@ pub fn control_character(
         };
 
         let mut movement = Vec3::default();
+
+        // Check for damage knock-back state
+        //
+        // We do a check for the enum variant first so we avoid mutably borrowing and triggering the
+        // is_changed() detection.
+        if matches!(
+            &character_state.action,
+            CharacterStateAction::DamageKnockBack { .. }
+        ) {
+            if let CharacterStateAction::DamageKnockBack {
+                force_timer,
+                freeze_timer,
+            } = &mut character_state.action
+            {
+                // Tick the knock-back timers
+                force_timer.tick(time.delta());
+                freeze_timer.tick(time.delta());
+
+                let mut skip_controls = false;
+
+                // If the freeze timer has **not** finished
+                if !freeze_timer.finished() {
+                    // Skip running the normal character controller behaviour to freeze the controls
+                    skip_controls = true;
+                } else {
+                }
+
+                // If the force timer has finished
+                if force_timer.finished() {
+                    // Set the velocity to 0
+                    *character_velocity = Velocity::from_linear(Vec3::default());
+                }
+
+                if skip_controls {
+                    continue;
+                }
+            }
+        }
 
         // Determine movement direction
         let mut directions = HashSet::default();
@@ -255,6 +294,78 @@ pub fn control_character(
     }
 }
 
+/// Handles damaging characters
+pub fn damage_character(
+    mut characters: Query<
+        (
+            &mut Velocity,
+            &mut CharacterState,
+            &mut Health,
+            &GlobalTransform,
+        ),
+        With<Handle<Character>>,
+    >,
+    damage_regions: Query<(&DamageRegion, &GlobalTransform)>,
+    mut collision_events: EventReader<CollisionEvent>,
+) {
+    // Check characters colliding with entrances
+    for event in collision_events.iter() {
+        let (ent1, ent2) = event.collision_shape_entities();
+
+        // If this is not a started event, skip it
+        if !event.is_started() {
+            continue;
+        }
+
+        // Get the character from the collision or skip the event
+        let (mut character_velocity, mut character_state, mut character_health, character_location) =
+            if let Ok(character) = characters.get_mut(ent1) {
+                character
+            } else if let Ok(character) = characters.get_mut(ent2) {
+                character
+            } else {
+                continue;
+            };
+
+        // Get the damage region of the collision or skip the event
+        let (damage_region, damage_region_location) = if let Ok(region) = damage_regions
+            .get(ent1)
+            .or_else(|_| damage_regions.get(ent2))
+        {
+            region
+        } else {
+            continue;
+        };
+
+        // Damage the player
+        character_health.current -= damage_region.damage;
+
+        // Put the player into knock-back frames
+        character_state.action = CharacterStateAction::DamageKnockBack {
+            force_timer: Timer::new(
+                Duration::from_secs_f32(damage_region.knock_back.force_duration),
+                false,
+            ),
+            freeze_timer: Timer::new(
+                Duration::from_secs_f32(damage_region.knock_back.freeze_duration),
+                false,
+            ),
+        };
+
+        // FIXME: We need to make sure the location is properly updated, right now we use
+        // GlobalTransform, but maybe we need to run this system after the transform propagation
+        // system.
+
+        // Get the push direction
+        let push_direction = (character_location.translation - damage_region_location.translation)
+            .normalize_or_zero();
+
+        // Set the character velocity
+        *character_velocity =
+            Velocity::from_linear(push_direction * damage_region.knock_back.speed);
+    }
+}
+
 /// Play the character's sprite animation
 pub fn animate_sprites(
     characters: Res<Assets<Character>>,
@@ -284,8 +395,10 @@ pub fn animate_sprites(
 
                 // Get the character info for our current action
                 let action = match state.action {
+                    CharacterStateAction::Idle | CharacterStateAction::DamageKnockBack { .. } => {
+                        &character.actions.idle
+                    }
                     CharacterStateAction::Walk => &character.actions.walk,
-                    CharacterStateAction::Idle => &character.actions.idle,
                 };
 
                 // Get the animation frames for the direction we are facing
