@@ -10,6 +10,7 @@ use bevy_retrograde::{prelude::*, ui::raui::prelude::widget};
 use super::*;
 
 mod game_init;
+mod map_loading;
 mod pause_menu;
 
 mod gameplay;
@@ -55,10 +56,10 @@ pub fn add_systems(app: &mut AppBuilder) {
             bevy::ecs::component::StorageType::SparseSet,
         ))
         .add_system(switch_fullscreen.system())
-        .add_system(game_init::spawn_map_collisions.system())
-        .add_system(game_init::hot_reload_map_collisions.system())
-        .add_system(game_init::spawn_map_entrances.system())
-        .add_system(game_init::hot_reload_map_entrances.system())
+        .add_system(map_loading::spawn_map_collisions.system())
+        .add_system(map_loading::hot_reload_map_collisions.system())
+        .add_system(map_loading::spawn_map_entrances.system())
+        .add_system(map_loading::hot_reload_map_entrances.system())
         // Game init state
         .add_state(GameState::Init)
         .add_system_set(
