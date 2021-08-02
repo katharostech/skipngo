@@ -1,4 +1,9 @@
-use bevy_retrograde::prelude::rapier_plugin::rapier::prelude::IntegrationParameters;
+use std::time::Duration;
+
+use bevy_retrograde::{
+    physics::heron::rapier_plugin::rapier2d::prelude::IntegrationParameters,
+    prelude::heron::PhysicsSteps,
+};
 
 use super::*;
 
@@ -34,7 +39,9 @@ pub fn await_init(
             max_linear_correction: 3.,
             ..(*physics_params)
         };
-        commands.insert_resource(PhysicsSteps::variable_timestep());
+        commands.insert_resource(PhysicsSteps::from_max_delta_time(Duration::from_secs_f64(
+            1.0 / 24.,
+        )));
 
         // Spawn the camera
         commands.spawn().insert_bundle(CameraBundle {

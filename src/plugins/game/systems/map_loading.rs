@@ -5,10 +5,16 @@ use bevy_retrograde::{
     core::image::{DynamicImage, GenericImageView},
     prelude::*,
 };
+use decorum::N32;
+use itertools::Itertools;
+use navmesh::NavMesh;
 
 use crate::plugins::game::{
     assets::GameInfo,
-    components::{DamageRegion, Entrance, TilesetTileCollisionMode, TilesetTileMetadata},
+    components::{
+        DamageRegion, DamageRegionKnockBack, Enemy, Entrance, PhysicsGroup,
+        TilesetTileCollisionMode, TilesetTileMetadata,
+    },
 };
 
 /// Component that caches map tileset collision info
@@ -25,6 +31,7 @@ pub struct LdtkMapTilesetTileCacheItem {
 pub struct LdtkMapTileCollisionShape;
 /// Component used to mark the map as having had its collisions loaded
 pub struct LdtkMapTileCollisionsLoaded;
+
 /// Get any maps that have not had their tile collisions spawned yet and spawn them
 pub fn spawn_map_collisions(
     mut commands: Commands,
@@ -289,6 +296,12 @@ pub fn spawn_map_collisions(
                             let mut entity_commands = map.spawn_bundle((
                                 LdtkMapTileCollisionShape,
                                 tile_cache_item.collision_shape.clone(),
+                                CollisionLayers::from_bits(
+                                    // Put it in the landscape group
+                                    PhysicsGroup::Terrain.to_bits(),
+                                    // And allow it to collide with all other layers
+                                    PhysicsGroup::all_bits(),
+                                ),
                                 Transform::from_translation(tile_pos + half_tile_size),
                                 GlobalTransform::default(),
                             ));
@@ -311,6 +324,7 @@ pub fn spawn_map_collisions(
             .insert(RigidBody::Static);
     }
 }
+
 pub fn hot_reload_map_collisions(
     mut commands: Commands,
     maps: Query<(Entity, &Handle<LdtkMap>)>,
@@ -343,7 +357,233 @@ pub fn hot_reload_map_collisions(
     }
 }
 
+/// A component containing the navigation meshes for all the levels in an LDtk map
+pub struct LdtkMapLevelNavigationMeshes(pub HashMap<String, NavMesh>);
+impl_deref!(LdtkMapLevelNavigationMeshes, HashMap<String, NavMesh>);
+
+// Component for map navmesh debug visualization
+pub struct LdtkMapLevelNavigationMeshDebugViz {
+    pub level_id: String,
+}
+
+pub fn generate_map_navigation_mesh(
+    mut commands: Commands,
+    // All of the maps that have their tile collisions loaded, but do not have nav meshes
+    maps: Query<
+        (Entity, &Handle<LdtkMap>),
+        (
+            With<LdtkMapTileCollisionsLoaded>,
+            With<LdtkMapEnemiesLoaded>,
+            With<LdtkMapEntrancesLoaded>,
+            Without<LdtkMapLevelNavigationMeshes>,
+        ),
+    >,
+    map_assets: Res<Assets<LdtkMap>>,
+    physics_world: bevy_retrograde::physics::heron::rapier_plugin::PhysicsWorld,
+    game_info: Option<Res<GameInfo>>,
+) {
+    // For every map
+    for (map_ent, map_handle) in maps.iter() {
+        let map = if let Some(map) = map_assets.get(map_handle) {
+            map
+        } else {
+            continue;
+        };
+
+        let mut meshes = HashMap::<String, NavMesh>::default();
+
+        // For every level in the map
+        for level in &map.project.levels {
+            // Get the grid size from the first layer of this level
+            let tile_size = level
+                .layer_instances
+                .as_ref()
+                .expect("Level has no layers")
+                .get(0)
+                .expect("Level has no layers")
+                .__grid_size as u32;
+
+            // The size of the level in tiles
+            let grid_size = UVec2::new(
+                level.px_wid as u32 / tile_size,
+                level.px_hei as u32 / tile_size,
+            );
+
+            // Get the level world offset
+            let level_offset = Vec3::new(level.world_x as f32, level.world_y as f32, 0.);
+
+            // Create a navigation mesh, using ray-casting to do edge testing
+            let starting_point = level_offset.truncate() + Vec2::splat(tile_size as f32) / 2.;
+            let edge_test = |v1: Vec2, v2: Vec2| {
+                physics_world
+                    .shape_cast_with_filter(
+                        &CollisionShape::Sphere { radius: 4. },
+                        v1.extend(0.),
+                        Quat::default(),
+                        (v2 - v1).extend(0.),
+                        CollisionLayers::from_bits(
+                            // In all groups
+                            PhysicsGroup::all_bits(),
+                            // Only collide with entrance shapes
+                            PhysicsGroup::Terrain.to_bits(),
+                        ),
+                        |_| true,
+                    )
+                    .is_none()
+            };
+
+            // Create a triangulation point list
+            let mut points =
+                Vec::<delaunator::Point>::with_capacity((grid_size.x * grid_size.y) as usize);
+
+            // For every node in the grid
+            for x in 0..=grid_size.x {
+                let x = x as f32;
+                for y in 0..=grid_size.y {
+                    let y = y as f32;
+
+                    // Get the node coordinate
+                    let pos = starting_point + Vec2::splat(tile_size as f32) * Vec2::new(x, y);
+
+                    // And add it to the points list
+                    points.push(delaunator::Point {
+                        x: pos.x as f64,
+                        y: pos.y as f64,
+                    });
+                }
+            }
+
+            // Triangulate the points
+            let triangulation =
+                delaunator::triangulate(&points).expect("Could not triangulate navigation mesh");
+
+            let mut edge_test_results = HashMap::<[[N32; 2]; 2], bool>::default();
+
+            // Convert triangles from Vec<usize> to Vec<[usize; 3]>
+            let triangles = triangulation
+                .triangles
+                .iter()
+                // .map(|&x| x as usize)
+                .chunks(3)
+                .into_iter()
+                .map(|mut chunk| {
+                    [
+                        *chunk.next().unwrap(),
+                        *chunk.next().unwrap(),
+                        *chunk.next().unwrap(),
+                    ]
+                })
+                // Discard any triangles where one of the edges doesn't pass the edge test
+                .filter(|tri| {
+                    let v1 = &points[tri[0]];
+                    let v1 = [N32::from(v1.x as f32), N32::from(v1.y as f32)];
+
+                    let v2 = &points[tri[1]];
+                    let v2 = [N32::from(v2.x as f32), N32::from(v2.y as f32)];
+
+                    let v3 = &points[tri[2]];
+                    let v3 = [N32::from(v3.x as f32), N32::from(v3.y as f32)];
+
+                    for edge in [[v1, v2], [v1, v3], [v2, v3]] {
+                        let edge_reachable = *edge_test_results.entry(edge).or_insert_with(|| {
+                            edge_test(
+                                Vec2::new(edge[0][0].into(), edge[0][1].into()),
+                                Vec2::new(edge[1][0].into(), edge[1][1].into()),
+                            )
+                        });
+                        if !edge_reachable {
+                            return false;
+                        }
+                    }
+
+                    true
+                })
+                .collect::<Vec<_>>();
+
+            // Convert our points to nav mesh vertices
+            let vertices = points
+                .into_iter()
+                .map(|p| navmesh::NavVec3 {
+                    x: p.x as f32,
+                    y: p.y as f32,
+                    z: 0.,
+                })
+                .collect::<Vec<_>>();
+            // Convert our indices to navmesh indices
+            let triangles = triangles
+                .into_iter()
+                .map(|t| navmesh::NavTriangle {
+                    first: t[0] as u32,
+                    second: t[1] as u32,
+                    third: t[2] as u32,
+                })
+                .collect::<Vec<_>>();
+
+            // Spawn debug visualization if enabled
+            if game_info
+                .as_ref()
+                .map(|x| x.debug_rendering.navmesh)
+                .unwrap_or_default()
+            {
+                commands
+                    .spawn_bundle((
+                        LdtkMapLevelNavigationMeshDebugViz {
+                            level_id: level.identifier.clone(),
+                        },
+                        Transform::default(),
+                        GlobalTransform::default(),
+                    ))
+                    .with_children(|viz| {
+                        for vert in &vertices {
+                            viz.spawn_bundle(ShapeBundle {
+                                shape: Shape::circle_filled(
+                                    epaint::pos2(vert.x as f32, vert.y as f32),
+                                    1.,
+                                    epaint::Color32::BLUE,
+                                ),
+                                transform: Transform::from_xyz(0., 0., 200.),
+                                ..Default::default()
+                            });
+                        }
+
+                        for triangle in &triangles {
+                            let v1 = &vertices[triangle.first as usize];
+                            let v2 = &vertices[triangle.second as usize];
+                            let v3 = &vertices[triangle.third as usize];
+
+                            viz.spawn_bundle(ShapeBundle {
+                                shape: Shape::convex_polygon(
+                                    vec![
+                                        epaint::pos2(v1.x as f32, v1.y as f32),
+                                        epaint::pos2(v2.x as f32, v2.y as f32),
+                                        epaint::pos2(v3.x as f32, v3.y as f32),
+                                    ],
+                                    epaint::Color32::TRANSPARENT,
+                                    (0.5, epaint::Color32::from_rgb(35, 18, 52)),
+                                ),
+                                transform: Transform::from_xyz(0., 0., 200.),
+                                ..Default::default()
+                            });
+                        }
+                    });
+            }
+
+            // Return the final navmesh
+            let nav_mesh = NavMesh::new(vertices, triangles).expect("Could not create navmesh");
+
+            meshes.insert(level.identifier.clone(), nav_mesh);
+        }
+
+        // Add the navigation meshes component to the map
+        commands
+            .entity(map_ent)
+            .insert(LdtkMapLevelNavigationMeshes(meshes));
+    }
+}
+
 pub struct LdtkMapEntrancesLoaded;
+
+/// Spawn the entrance entities from the map
 pub fn spawn_map_entrances(
     mut commands: Commands,
     maps: Query<(Entity, &Handle<LdtkMap>), Without<LdtkMapEntrancesLoaded>>,
@@ -436,6 +676,12 @@ pub fn spawn_map_entrances(
                                 border_radius: None,
                             },
                             RigidBody::Sensor,
+                            CollisionLayers::from_bits(
+                                // In the entrance group
+                                PhysicsGroup::Entrance.to_bits(),
+                                // Can interact with all other groups
+                                PhysicsGroup::all_bits(),
+                            ),
                             Transform::from_translation(
                                 level_offset + layer_offset + entrance_position,
                             ),
@@ -449,6 +695,7 @@ pub fn spawn_map_entrances(
         map_commands.insert(LdtkMapEntrancesLoaded);
     }
 }
+
 pub fn hot_reload_map_entrances(
     mut commands: Commands,
     maps: Query<(Entity, &Handle<LdtkMap>)>,
@@ -466,6 +713,113 @@ pub fn hot_reload_map_entrances(
             // Despawn all entrances for the modified map
             for (ent, entrance) in entrances.iter() {
                 if &entrance.map_handle == handle {
+                    commands.entity(ent).despawn();
+                }
+            }
+        }
+    }
+}
+
+pub struct LdtkMapEnemiesLoaded;
+pub fn spawn_map_enemies(
+    mut commands: Commands,
+    maps: Query<(Entity, &Handle<LdtkMap>), Without<LdtkMapEnemiesLoaded>>,
+    map_assets: Res<Assets<LdtkMap>>,
+    asset_server: Res<AssetServer>,
+) {
+    // For every map
+    for (map_ent, map_handle) in maps.iter() {
+        let map = if let Some(map) = map_assets.get(map_handle) {
+            map
+        } else {
+            continue;
+        };
+
+        // For every level in the map
+        for level in &map.project.levels {
+            let level_offset = Vec3::new(level.world_x as f32, level.world_y as f32, 0.);
+
+            // For every layer
+            for layer in level.layer_instances.as_ref().expect("Level has no layers") {
+                let layer_offset = level_offset
+                    + Vec3::new(
+                        layer.__px_total_offset_x as f32,
+                        layer.__px_total_offset_y as f32,
+                        0.,
+                    );
+
+                // For every enemy entity in the layer
+                for entity in layer
+                    .entity_instances
+                    .iter()
+                    .filter(|x| x.__identifier == "Enemy")
+                {
+                    let pos =
+                        layer_offset + Vec3::new(entity.px[0] as f32, entity.px[1] as f32, 100.);
+
+                    // Spawn an enemy
+                    commands
+                        .spawn_bundle(SpriteBundle {
+                            image: asset_server.load("sprites/blueRadish.png"),
+                            transform: Transform::from_translation(pos),
+                            sprite: Sprite {
+                                pixel_perfect: false,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        })
+                        .insert(Enemy {
+                            level: level.identifier.clone(),
+                            map_handle: map_handle.clone(),
+                        })
+                        .insert(PhysicMaterial {
+                            density: 100000.,
+                            ..Default::default()
+                        })
+                        .insert(DamageRegion {
+                            damage: 1,
+                            knock_back: DamageRegionKnockBack {
+                                speed: 800.,
+                                force_duration: 0.04,
+                                freeze_duration: 0.18,
+                            },
+                        })
+                        .insert(RigidBody::Dynamic)
+                        .insert(RotationConstraints::lock())
+                        .insert(CollisionShape::Sphere { radius: 4. })
+                        .insert(CollisionLayers::from_bits(
+                            // In the enemy group
+                            PhysicsGroup::Enemy.to_bits(),
+                            // Can interact with all other groups
+                            PhysicsGroup::all_bits(),
+                        ))
+                        .insert(Velocity::default());
+                }
+            }
+        }
+
+        // Mark map enemies as loaded
+        commands.entity(map_ent).insert(LdtkMapEnemiesLoaded);
+    }
+}
+
+pub fn hot_reload_map_enemies(
+    mut commands: Commands,
+    maps: Query<(Entity, &Handle<LdtkMap>)>,
+    enemies: Query<(Entity, &Enemy)>,
+    mut events: EventReader<AssetEvent<LdtkMap>>,
+) {
+    for event in events.iter() {
+        if let AssetEvent::Modified { handle } = event {
+            // Remove the `LdtkMapEnemiesLoaded` flag from the map
+            for (ent, map) in maps.iter() {
+                if map == handle {
+                    commands.entity(ent).remove::<LdtkMapEnemiesLoaded>();
+                }
+            }
+            // Despawn all enemies for the modified map
+            for (ent, enemy) in enemies.iter() {
+                if &enemy.map_handle == handle {
                     commands.entity(ent).despawn();
                 }
             }

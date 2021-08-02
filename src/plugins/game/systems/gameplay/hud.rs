@@ -14,7 +14,7 @@ pub fn hud(ctx: WidgetContext) -> WidgetNode {
     // Get the health of the player
     let player_health = {
         let mut q = world.query_filtered::<&Health, With<Handle<Character>>>();
-        if let Some(health) = q.iter(&world).next() {
+        if let Some(health) = q.iter(world).next() {
             health.current
         } else {
             return WidgetNode::None;

@@ -16,8 +16,8 @@ mod pause_menu;
 mod gameplay;
 use gameplay::{
     animate_sprites, camera_follow_system, change_level, check_for_game_over, control_character,
-    damage_character, finish_spawning_character, keyboard_control_input, spawn_hud,
-    touch_control_input,
+    damage_character, enemy_follow_player, finish_spawning_character, keyboard_control_input,
+    spawn_hud, touch_control_input,
 };
 
 mod game_over;
@@ -60,6 +60,14 @@ pub fn add_systems(app: &mut AppBuilder) {
         .add_system(map_loading::hot_reload_map_collisions.system())
         .add_system(map_loading::spawn_map_entrances.system())
         .add_system(map_loading::hot_reload_map_entrances.system())
+        .add_system(map_loading::spawn_map_enemies.system())
+        .add_system(map_loading::hot_reload_map_enemies.system())
+        .add_system_to_stage(
+            CoreStage::PostUpdate,
+            map_loading::generate_map_navigation_mesh
+                .system()
+                .after(PhysicsSystem::Events),
+        )
         // Game init state
         .add_state(GameState::Init)
         .add_system_set(
@@ -96,6 +104,7 @@ pub fn add_systems(app: &mut AppBuilder) {
                         .after(Input),
                 )
                 .with_system(animate_sprites.system().after(ControlCharacter))
+                .with_system(enemy_follow_player.system().after(ControlCharacter))
                 .with_system(change_level.system().after(ControlCharacter)),
         )
         .add_system_set_to_stage(

@@ -143,6 +143,18 @@ pub struct CharacterBundle {
 }
 
 //
+// Physics
+//
+
+#[derive(heron::PhysicsLayer)]
+pub enum PhysicsGroup {
+    Terrain,
+    Entrance,
+    Player,
+    Enemy,
+}
+
+//
 // Map entities
 //
 
@@ -217,4 +229,13 @@ pub struct DamageRegionKnockBack {
     pub force_duration: f32,
     /// How long to freeze player controls
     pub freeze_duration: f32,
+}
+
+/// An enemy on the map
+#[derive(Clone, Debug)]
+pub struct Enemy {
+    /// The identifier of the map level that the enemy is in
+    pub level: String,
+    /// The handle to the map this enemy is in
+    pub map_handle: Handle<LdtkMap>,
 }

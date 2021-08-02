@@ -13,6 +13,7 @@ use bevy_retrograde::prelude::*;
 use structopt::StructOpt;
 
 pub mod plugins;
+pub mod utils;
 
 #[cfg(wasm)]
 pub mod wasm_utils;
