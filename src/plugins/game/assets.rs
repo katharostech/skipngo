@@ -45,7 +45,10 @@ pub struct GameInfo {
     pub camera_size: CameraSize,
     /// Splash screen configuration
     pub splash_screen: SplashScreen,
+    /// UI theme configuration
     pub ui_theme: UiTheme,
+    /// Debug rendering options
+    pub debug_rendering: DebugRenderingOptions,
 }
 
 /// Splash screen settings
@@ -135,6 +138,14 @@ pub enum CameraSizeDef {
     FixedHeight(u32),
     FixedWidth(u32),
     LetterBoxed { width: u32, height: u32 },
+}
+
+#[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+#[serde(default)]
+pub struct DebugRenderingOptions {
+    /// Enable navmesh rendering
+    pub navmesh: bool,
 }
 
 //

@@ -1,7 +1,12 @@
 use std::time::Duration;
 
+use bevy_retrograde::physics::heron::rapier_plugin::PhysicsWorld;
 use bevy_retrograde::prelude::{kira::parameter::tween::Tween, raui::core::make_widget};
+use itertools::Itertools;
 
+use crate::utils::{IntoBevy, IntoNav};
+
+use super::map_loading::LdtkMapLevelNavigationMeshes;
 use super::*;
 
 mod hud;
@@ -181,7 +186,13 @@ pub fn finish_spawning_character(
                 .insert(CharacterAnimationTimer(Timer::new(
                     Duration::from_millis(100),
                     true,
-                )));
+                )))
+                .insert(CollisionLayers::from_bits(
+                    // Put in the player group
+                    PhysicsGroup::Player.to_bits(),
+                    // Interact with all other groups
+                    PhysicsGroup::all_bits(),
+                ));
         }
     }
 }
@@ -761,7 +772,7 @@ pub fn change_level(
                     .bg_color
                     .as_ref()
                     .unwrap_or(&map.project.default_level_bg_color)
-                    .strip_prefix("#")
+                    .strip_prefix('#')
                     .expect("Invalid background color"),
             )
             .expect("Invalid background color");
@@ -787,5 +798,138 @@ pub fn change_level(
                 .len() as f32
                 * 2.,
         );
+    }
+}
+
+pub struct EnemyPathfindingDebugViz {
+    pub enemy_ent: Entity,
+}
+
+pub fn enemy_follow_player(
+    mut commands: Commands,
+    mut enemies: Query<(Entity, &Transform, &mut Velocity, &Enemy)>,
+    characters: Query<(Entity, &Transform), With<Handle<Character>>>,
+    maps: Query<&LdtkMapLevelNavigationMeshes, With<Handle<LdtkMap>>>,
+    enemy_pathfinding_debug_vizes: Query<Entity, With<EnemyPathfindingDebugViz>>,
+    current_level: Option<Res<CurrentLevel>>,
+    physics_world: PhysicsWorld,
+    game_info: Res<GameInfo>,
+) {
+    const ENEMY_SPEED: f32 = 40.;
+
+    let current_level = if let Some(level) = current_level {
+        level
+    } else {
+        return;
+    };
+
+    let (character_ent, character_transform) = if let Ok(character) = characters.single() {
+        character
+    } else {
+        return;
+    };
+
+    // For the sake of pathfinding we set the z position to 0.
+    let character_pos = character_transform.translation.truncate().extend(0.);
+
+    let map_nav_meshes = if let Ok(meshes) = maps.single() {
+        meshes
+    } else {
+        return;
+    };
+
+    let mesh = if let Some(mesh) = map_nav_meshes.get(&current_level.0) {
+        mesh
+    } else {
+        return;
+    };
+
+    'enemy: for (enemy_ent, enemy_transform, mut enemy_velocity, enemy) in enemies.iter_mut() {
+        let enemy_pos = enemy_transform.translation.truncate().extend(0.);
+
+        // Skip the enemy if he is not from the current level
+        if enemy.level != current_level.0 {
+            continue;
+        }
+
+        if game_info.debug_rendering.navmesh {
+            // Clean up navigation debug viz from previous frame
+            for entity in enemy_pathfinding_debug_vizes.iter() {
+                commands.entity(entity).despawn();
+            }
+        }
+
+        // Try to plot a path straight to the player
+        let straight_path = if let Some(collision) = physics_world.shape_cast_with_filter(
+            &CollisionShape::Sphere { radius: 8. },
+            enemy_pos,
+            Quat::default(),
+            character_pos - enemy_pos,
+            CollisionLayers::default(),
+            |entity| entity != enemy_ent,
+        ) {
+            if collision.entity == character_ent {
+                // Spawn debug rendering if enabled
+                if game_info.debug_rendering.navmesh {
+                    commands
+                        .spawn_bundle(ShapeBundle {
+                            shape: Shape::line_segment(
+                                [
+                                    epaint::pos2(enemy_pos.x, enemy_pos.y),
+                                    epaint::pos2(character_pos.x, character_pos.y),
+                                ],
+                                (2., epaint::Color32::RED),
+                            ),
+                            transform: Transform::from_xyz(0., 0., 1024.),
+                            ..Default::default()
+                        })
+                        .insert(EnemyPathfindingDebugViz { enemy_ent });
+                }
+
+                Some(vec![character_pos.into_nav()])
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Use navigation mesh to plot a path to the character if the straight path doesn't work
+        if let Some(path) = straight_path.or_else(|| {
+            mesh.find_path(
+                enemy_pos.into_nav(),
+                character_pos.into_nav(),
+                navmesh::NavQuery::Accuracy,
+                navmesh::NavPathMode::Accuracy,
+            )
+        }) {
+            // Display debug visualization if enabled
+            if game_info.debug_rendering.navmesh {
+                for (v1, v2) in path.iter().tuple_windows() {
+                    commands
+                        .spawn_bundle(ShapeBundle {
+                            shape: Shape::line_segment(
+                                [epaint::pos2(v1.x, v1.y), epaint::pos2(v2.x, v2.y)],
+                                (2., epaint::Color32::GREEN),
+                            ),
+                            transform: Transform::from_xyz(0., 0., 1024.),
+                            ..Default::default()
+                        })
+                        .insert(EnemyPathfindingDebugViz { enemy_ent });
+                }
+            }
+
+            for node in path {
+                let vel = (node.into_bevy() - enemy_pos).normalize_or_zero() * ENEMY_SPEED;
+                if vel.length() > 0.5 {
+                    *enemy_velocity = vel.into();
+                    break 'enemy;
+                }
+            }
+
+            *enemy_velocity = Velocity::default()
+        } else {
+            *enemy_velocity = Velocity::default()
+        }
     }
 }

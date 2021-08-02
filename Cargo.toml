@@ -16,13 +16,17 @@ categories = [
 ]
 
 [dependencies]
-bevy = { version = "*", default-features = false }
-bevy_retrograde = { git = "https://github.com/katharostech/bevy_retrograde.git", features = ["ldtk"] }
+bevy = { version = "0.5", default-features = false }
+bevy_retrograde = { git = "https://github.com/katharostech/bevy_retrograde.git", features = ["ldtk", "epaint"] }
 serde_yaml = "0.8.17"
 serde = "1.0.124"
 thiserror = "1.0.24"
 anyhow = "1.0.38"
 hex = "0.4.3"
+navmesh = "0.8.3"
+delaunator = "0.2.1"
+decorum = "0.3.1"
+itertools = "0.10.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3.48", features = ["Window", "Location", "Document"] }
