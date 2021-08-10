@@ -112,19 +112,19 @@ pub fn keyboard_control_input(
         *pause_was_pressed = false;
     }
 
-    if keyboard_input.pressed(KeyCode::Left) {
+    if keyboard_input.pressed(KeyCode::A) {
         control_events.send(ControlEvent::MoveLeft);
     }
 
-    if keyboard_input.pressed(KeyCode::Right) {
+    if keyboard_input.pressed(KeyCode::D) {
         control_events.send(ControlEvent::MoveRight);
     }
 
-    if keyboard_input.pressed(KeyCode::Up) {
+    if keyboard_input.pressed(KeyCode::W) {
         control_events.send(ControlEvent::MoveUp);
     }
 
-    if keyboard_input.pressed(KeyCode::Down) {
+    if keyboard_input.pressed(KeyCode::S) {
         control_events.send(ControlEvent::MoveDown);
     }
 }
